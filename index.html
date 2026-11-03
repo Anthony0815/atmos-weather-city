@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -251,6 +251,10 @@
     .ms span{display:block;font-size:6.5px;letter-spacing:.12em;color:#7791a3;margin-bottom:3px}
     .ms b{display:block;font-size:14px;font-weight:300;color:#eef8fc;font-variant-numeric:tabular-nums}
     .ms em{font-style:normal;font-size:7px;color:#7690a2;margin-left:2px}
+    .search-results{max-height:36vh;overflow-y:auto;-webkit-overflow-scrolling:touch;z-index:30}
+    body.search-open .mobile-stats,
+    body.search-open .controls{display:none}
+    body.search-open #markers{opacity:.16}
     .top-right .status-line{display:none}
   }
   @media (max-width:520px){
@@ -966,6 +970,47 @@
       }
     }
 
+    /* ---- traffic signals and stop bars ---- */
+    const sigColors = {
+      red: C("#ff3a2c"),
+      yellow: C("#ffbf3a"),
+      green: C("#2ee08a")
+    };
+    const signalHeads = [
+      { x: -5.65, z: 5.65, dir: "ew" },
+      { x: 5.65, z: -5.65, dir: "ew" },
+      { x: -5.65, z: -5.65, dir: "ns" },
+      { x: 5.65, z: 5.65, dir: "ns" }
+    ];
+    const signalBatches = [];
+    for (const dir of ["ew", "ns"]) {
+      for (const color of ["red", "yellow", "green"]) {
+        const b = new MeshBuilder();
+        for (const head of signalHeads) {
+          if (head.dir !== dir) continue;
+          const li = color === "red" ? 0 : (color === "yellow" ? 1 : 2);
+          b.sphere(head.x + 0.28, 3.45 + li * 0.35, head.z + 0.28, 0.23, 10, 6, sigColors[color]);
+        }
+        signalBatches.push({
+          name: "signal_" + dir + "_" + color,
+          mesh: b,
+          mat: { rough: 0.25, metal: 0, emissive: 3.0, alpha: 1 },
+          signal: true,
+          signalDir: dir,
+          signalColor: color
+        });
+      }
+    }
+    for (const head of signalHeads) {
+      metal.cyl(head.x, CITY_BASE, head.z, 0.07, 4.35, 8, PAL.metalDark);
+      detail.box(head.x, 3.80, head.z, 0.54, 1.35, 0.38, PAL.metalDark);
+      /* dark lens caps omitted: colored lamps sit proud of the housing */
+    }
+    for (const s of [-5.65, 5.65]) {
+      paint.box(s, CITY_BASE + 0.018, 0, 0.42, 0.03, 8.0, PAL.lane);
+      paint.box(0, CITY_BASE + 0.018, s, 8.0, 0.03, 0.42, PAL.lane);
+    }
+
     /* ---- animated cars ---- */
     const carSpecs = [
       { axis: "x", lane: 1.55, dir: 1, speed: 4.2, phase: 0.75, color: PAL.carA },
@@ -1011,6 +1056,7 @@
         { name: "water", mesh: water, mat: { rough: 0.06, metal: 0.40, emissive: 0, alpha: 1 } },
         { name: "light", mesh: light, mat: { rough: 0.28, metal: 0.0, emissive: 2.4, alpha: 1 } },
         { name: "uv", mesh: uv, mat: { rough: 0.2, metal: 0.0, emissive: 0, alpha: 1 } },
+        ...signalBatches,
         ...carBatches
       ],
       cars,
@@ -1712,6 +1758,8 @@ void main(){
     this.gl = gl;
     this.lightVP = mat4();
     this.carModels = [];
+    this.carStates = (this.world.cars || []).map(c => ({ travel: c.phase * 64, speed: c.speed }));
+    this.signal = this._signalState(0);
     this.lastVP = this.lastVP || mat4();
     this.hdr = !!gl.getExtension("EXT_color_buffer_float");
     gl.getExtension("OES_texture_float_linear");
@@ -1799,7 +1847,12 @@ void main(){
       gl.enableVertexAttribArray(2);
       gl.vertexAttribPointer(2, 3, gl.FLOAT, false, stride, 24);
       gl.bindVertexArray(null);
-      this.batches.push({ name: b.name, vao, buf, count, mat: b.mat, car: b.car, carLight: b.carLight });
+      this.batches.push({
+        name: b.name, vao, buf, count, mat: b.mat,
+        car: b.car, carLight: b.carLight,
+        signal: b.signal, signalDir: b.signalDir, signalColor: b.signalColor,
+        hidden: false
+      });
     }
   };
 
@@ -2015,8 +2068,18 @@ void main(){
       { az: 0.55, el: 0.38, dist: 58.0, tx: 0, ty: 32.0, tz: -6.0 },
       { az: 0.86, el: 0.07, dist: 28.0, tx: 0, ty: 7.0, tz: 0 }
     ];
-    const p = presets[this.view];
-    this.camGoal = { ...p };
+    const narrow = this.cssW / Math.max(1, this.cssH) < 0.72;
+    if (narrow) {
+      const mobilePresets = [
+        { az: 0.72, el: 0.11, dist: 104.0, tx: 0, ty: 18.0, tz: -6.0 },
+        { az: 0.55, el: 0.36, dist: 84.0, tx: 0, ty: 32.0, tz: -6.0 },
+        { az: 0.86, el: 0.07, dist: 38.0, tx: 0, ty: 7.0, tz: 0 }
+      ];
+      this.camGoal = { ...mobilePresets[this.view] };
+    } else {
+      const p = presets[this.view];
+      this.camGoal = { ...p };
+    }
     this.userHold = Math.max(this.userHold, 6.0);
   };
 
@@ -2049,7 +2112,7 @@ void main(){
         const pts = [...this.pointers.values()];
         const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
         if (this.pinchDist > 0) {
-          this.camGoal.dist = clamp(this.camGoal.dist * (this.pinchDist / Math.max(d, 1)), 20.0, 90.0);
+          this.camGoal.dist = clamp(this.camGoal.dist * (this.pinchDist / Math.max(d, 1)), 20.0, 120.0);
         }
         this.pinchDist = d;
         return;
@@ -2075,7 +2138,7 @@ void main(){
     c.addEventListener("pointercancel", end);
     c.addEventListener("wheel", e => {
       e.preventDefault();
-      this.camGoal.dist = clamp(this.camGoal.dist * Math.exp(e.deltaY * 0.0011), 20.0, 90.0);
+      this.camGoal.dist = clamp(this.camGoal.dist * Math.exp(e.deltaY * 0.0011), 20.0, 120.0);
       this.userHold = 3.5;
     }, { passive: false });
     window.addEventListener("resize", () => {
@@ -2101,8 +2164,11 @@ void main(){
     ];
     const target = [this.cam.tx, this.cam.ty, this.cam.tz];
     const view = mat4(), proj = mat4();
+    const aspect = this.width / Math.max(1, this.height);
+    const narrow = this.cssW / Math.max(1, this.cssH) < 0.72;
+    this.fov = narrow ? 58 : 46;
     look(view, eye, target, [0, 1, 0]);
-    persp(proj, 46 * D2R, this.width / Math.max(1, this.height), 0.10, 240);
+    persp(proj, this.fov * D2R, aspect, 0.10, 240);
     m4mul(this.lastVP, proj, view);
     this.lastView = view;
     this.lastProj = proj;
@@ -2110,8 +2176,8 @@ void main(){
     this.camFwd = norm3(sub3(target, eye));
     this.camRight = norm3(cross3(this.camFwd, [0, 1, 0]));
     this.camUp = norm3(cross3(this.camRight, this.camFwd));
-    this.tanHalf = Math.tan(42 * D2R / 2);
-    this.aspect = this.width / Math.max(1, this.height);
+    this.tanHalf = Math.tan(this.fov * D2R / 2);
+    this.aspect = aspect;
   };
 
   /* --------------------------- sun & sky ---------------------------- */
@@ -2331,7 +2397,7 @@ void main(){
       gl.useProgram(this.P.shadow);
       gl.uniformMatrix4fv(this.U.shadow.uLightVP, false, this.lightVP);
       for (const b of this.batches) {
-        if (b.car != null) continue;
+        if (b.car != null || b.signal) continue;
         if (b.name === "glass" || b.name === "light" || b.name === "water" || b.name === "uv") continue;
         gl.bindVertexArray(b.vao);
         gl.drawArrays(gl.TRIANGLES, 0, b.count);
@@ -2360,10 +2426,17 @@ void main(){
     const uvBatch = this.batches.find(b => b.name === "uv");
     const uvK = clamp((Number(this.env && this.env.uv) || 0) / 11, 0, 1);
     if (uvBatch) uvBatch.mat.emissive = uvK * 3.1;
+    const sig = this.signal || this._signalState(this.time);
     for (const b of this.batches) {
-      if (b.name === "glass") continue;
+      if (!b.signal) continue;
+      const active = (b.signalDir === "ew" ? sig.ew : sig.ns) === b.signalColor;
+      b.hidden = !active;
+      b.mat.emissive = active ? 3.0 : 0;
+    }
+    for (const b of this.batches) {
+      if (b.name === "glass" || b.hidden) continue;
       if (b.name === "water" && this.fx.wet < 0.055) continue;
-      if (b.name === "uv" && uvK < 0.05) continue;
+      if (b.name === "uv" && (uvK < 0.05 || this.cssW < 620)) continue;
       this._drawBatch(b, b.name === "water");
     }
 
@@ -2489,21 +2562,50 @@ void main(){
     for (const k of Object.keys(this.fxTarget)) this.fx[k] = this.fxTarget[k];
   };
 
-  WS.prototype._updateCars = function () {
+  WS.prototype._signalState = function (time) {
+    let t = (time || 0) % 24;
+    if (t < 0) t += 24;
+    if (t < 8) return { ew: "green", ns: "red" };
+    if (t < 10) return { ew: "yellow", ns: "red" };
+    if (t < 12) return { ew: "red", ns: "red" };
+    if (t < 20) return { ew: "red", ns: "green" };
+    if (t < 22) return { ew: "red", ns: "yellow" };
+    return { ew: "red", ns: "red" };
+  };
+
+  WS.prototype._updateCars = function (dt) {
     const cars = (this.world && this.world.cars) || [];
-    const span = 64.0;
+    const step = dt || 0.016;
+    const STOP = 25.4;
+    if (!this.carStates || this.carStates.length !== cars.length) {
+      this.carStates = cars.map(c => ({ travel: c.phase * 64, speed: c.speed }));
+    }
+    const sig = this._signalState(this.time);
+    this.signal = sig;
     this.carModels = new Array(cars.length);
     for (let i = 0; i < cars.length; i++) {
       const c = cars[i];
-      let u = (this.time * c.speed / span + c.phase) % 1;
-      if (u < 0) u += 1;
+      const st = this.carStates[i];
+      const go = (c.axis === "x" ? sig.ew : sig.ns) === "green";
+      let target = c.speed;
+      const dist = STOP - st.travel;
+      if (!go && dist > -0.2 && dist < 4.8) target = 0;
+      const accel = target > st.speed ? 2.2 : 6.0;
+      st.speed += clamp(target - st.speed, -accel * step, 2.2 * step);
+      if (target === 0 && st.speed < 0.03) st.speed = 0;
+      let next = st.travel + st.speed * step;
+      if (!go && st.travel <= STOP && next > STOP) next = STOP;
+      if (next >= 64) next -= 64;
+      if (next < 0) next += 64;
+      st.travel = next;
+      const pos = c.dir > 0 ? -32 + next : 32 - next;
       let x = 0, z = 0, ry = 0;
       if (c.axis === "x") {
-        x = c.dir > 0 ? -32 + u * span : 32 - u * span;
+        x = pos;
         z = c.lane;
         ry = c.dir > 0 ? 0 : Math.PI;
       } else {
-        z = c.dir > 0 ? -32 + u * span : 32 - u * span;
+        z = pos;
         x = c.lane;
         ry = c.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
       }
@@ -2527,7 +2629,7 @@ void main(){
     f.wet += (t.wet - f.wet) * kSlow;
     f.snow += (t.snow - f.snow) * kSlow;
     this._updateSun(now);
-    this._updateCars();
+    this._updateCars(d);
     this._updateCamera(d, now);
     this._draw();
   };
@@ -3418,12 +3520,14 @@ void main(){
   function hideSearch() {
     const box = $("#searchResults");
     if (box) box.classList.remove("on");
+    document.body.classList.remove("search-open");
   }
 
   function renderSearchResults(list, query) {
     const box = $("#searchResults");
     if (!box) return;
     box.innerHTML = "";
+    document.body.classList.add("search-open");
     if (!list.length) {
       box.innerHTML = `<div class="sr-empty">未找到「${query.replace(/[<>&]/g, "")}」</div>`;
       box.classList.add("on");
@@ -3460,6 +3564,7 @@ void main(){
     }
     const seq = ++searchSeq;
     const box = $("#searchResults");
+    document.body.classList.add("search-open");
     if (box) {
       box.innerHTML = `<div class="sr-empty">搜索中…</div>`;
       box.classList.add("on");
@@ -3571,6 +3676,18 @@ void main(){
     buildMarkers();
     const input = $("#cityInput");
     if (input) {
+      const searchWrap = input.closest(".search-wrap");
+      if (searchWrap) {
+        searchWrap.addEventListener("focusin", () => document.body.classList.add("search-open"));
+        searchWrap.addEventListener("focusout", () => {
+          setTimeout(() => {
+            if (!searchWrap.contains(document.activeElement)) {
+              hideSearch();
+              document.body.classList.remove("search-open");
+            }
+          }, 160);
+        });
+      }
       input.addEventListener("input", () => {
         clearTimeout(searchTimer);
         const v = input.value.trim();
