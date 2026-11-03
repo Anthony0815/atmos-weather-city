@@ -735,22 +735,24 @@
   const terrainH = () => 0;
   const terrainN = () => [0, 1, 0];
 
-  function addCar(paint, metal, light, detail, x, z, ry, bodyCol) {
-    const rot = (dx, dz) => [x + dx * Math.cos(ry) + dz * Math.sin(ry), z - dx * Math.sin(ry) + dz * Math.cos(ry)];
-    const wheel = (dx, dz) => {
-      const p = rot(dx, dz);
-      metal.box(p[0], 0.22, p[1], 0.34, 0.28, 0.26, PAL.metalDark, ry);
-    };
-    paint.box(x, 0.54, z, 1.86, 0.52, 0.92, bodyCol, ry);
-    paint.box(x, 0.92, z, 0.98, 0.42, 0.78, cmul(bodyCol, 0.8), ry, PAL.winCool);
-    wheel(-0.58, -0.46); wheel(-0.58, 0.46); wheel(0.62, -0.46); wheel(0.62, 0.46);
-    const h1 = rot(0.96, -0.30), h2 = rot(0.96, 0.30);
-    light.box(h1[0], 0.58, h1[1], 0.08, 0.13, 0.20, PAL.winPale, ry);
-    light.box(h2[0], 0.58, h2[1], 0.08, 0.13, 0.20, PAL.winPale, ry);
-    const t1 = rot(-0.96, -0.30), t2 = rot(-0.96, 0.30);
-    light.box(t1[0], 0.58, t1[1], 0.05, 0.10, 0.16, PAL.cityRed, ry);
-    light.box(t2[0], 0.58, t2[1], 0.05, 0.10, 0.16, PAL.cityRed, ry);
-    detail.box(x, 0.26, z, 1.7, 0.08, 0.84, PAL.metalDark, ry);
+  function makeCar(bodyCol) {
+    const body = new MeshBuilder();
+    const lights = new MeshBuilder();
+    body.box(0, 0.54, 0, 1.86, 0.52, 0.92, bodyCol, 0);
+    body.box(0, 0.92, 0, 0.98, 0.42, 0.78, cmul(bodyCol, 0.8), 0, PAL.winCool);
+    for (const dx of [-0.58, 0.62]) {
+      for (const dz of [-0.46, 0.46]) {
+        body.box(dx, 0.22, dz, 0.34, 0.28, 0.26, PAL.metalDark);
+      }
+    }
+    body.box(0, 0.26, 0, 1.7, 0.08, 0.84, PAL.metalDark);
+    body.box(0, 0.72, 0.47, 1.45, 0.10, 0.03, PAL.laneDim);
+    body.box(0, 0.72, -0.47, 1.45, 0.10, 0.03, PAL.laneDim);
+    lights.box(0.96, 0.58, 0.30, 0.08, 0.13, 0.20, PAL.winPale);
+    lights.box(0.96, 0.58, -0.30, 0.08, 0.13, 0.20, PAL.winPale);
+    lights.box(-0.96, 0.58, 0.30, 0.05, 0.10, 0.16, PAL.cityRed);
+    lights.box(-0.96, 0.58, -0.30, 0.05, 0.10, 0.16, PAL.cityRed);
+    return { body, lights };
   }
 
   function addTower(paint, metal, light, detail, opt) {
@@ -964,11 +966,32 @@
       }
     }
 
-    /* ---- cars make the scale and the wet street specific ---- */
-    addCar(paint, metal, light, detail, -10.5, 1.55, 0, PAL.carA);
-    addCar(paint, metal, light, detail, 8.5, -1.55, Math.PI, PAL.carB);
-    addCar(paint, metal, light, detail, 1.55, -11.0, Math.PI / 2, PAL.carA);
-    addCar(paint, metal, light, detail, -1.55, 12.5, -Math.PI / 2, PAL.carB);
+    /* ---- animated cars ---- */
+    const carSpecs = [
+      { axis: "x", lane: 1.55, dir: 1, speed: 4.2, phase: 0.75, color: PAL.carA },
+      { axis: "x", lane: -1.55, dir: -1, speed: 3.8, phase: 0.84, color: PAL.carB },
+      { axis: "z", lane: 1.55, dir: -1, speed: 4.6, phase: 0.73, color: PAL.carA },
+      { axis: "z", lane: -1.55, dir: 1, speed: 4.8, phase: 0.70, color: PAL.carB }
+    ];
+    const cars = [];
+    const carBatches = [];
+    carSpecs.forEach((spec, i) => {
+      const car = makeCar(spec.color);
+      carBatches.push({
+        name: "car" + i + "body",
+        mesh: car.body,
+        mat: { rough: 0.50, metal: 0.30, emissive: 0, alpha: 1 },
+        car: i
+      });
+      carBatches.push({
+        name: "car" + i + "lights",
+        mesh: car.lights,
+        mat: { rough: 0.22, metal: 0, emissive: 1.4, alpha: 1 },
+        car: i,
+        carLight: true
+      });
+      cars.push({ axis: spec.axis, lane: spec.lane, dir: spec.dir, speed: spec.speed, phase: spec.phase });
+    });
 
     /* ---- plaza furniture (no trees, no observatory) ---- */
     for (let k = 0; k < 4; k++) {
@@ -987,8 +1010,10 @@
         { name: "detail", mesh: detail, mat: { rough: 0.72, metal: 0.15, emissive: 0, alpha: 1 } },
         { name: "water", mesh: water, mat: { rough: 0.06, metal: 0.40, emissive: 0, alpha: 1 } },
         { name: "light", mesh: light, mat: { rough: 0.28, metal: 0.0, emissive: 2.4, alpha: 1 } },
-        { name: "uv", mesh: uv, mat: { rough: 0.2, metal: 0.0, emissive: 0, alpha: 1 } }
+        { name: "uv", mesh: uv, mat: { rough: 0.2, metal: 0.0, emissive: 0, alpha: 1 } },
+        ...carBatches
       ],
+      cars,
       lampPositions,
       puddles,
       anchors: {
@@ -1108,6 +1133,16 @@
   function mat4() {
     return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
   }
+  function modelMat(x, y, z, ry) {
+    const c = Math.cos(ry), s = Math.sin(ry);
+    return new Float32Array([
+      c, 0, -s, 0,
+      0, 1, 0, 0,
+      s, 0, c, 0,
+      x, y, z, 1
+    ]);
+  }
+  const M_IDENT = mat4();
   function m4mul(out, a, b) {
     for (let c = 0; c < 4; c++) {
       for (let r = 0; r < 4; r++) {
@@ -1161,6 +1196,7 @@ layout(location=0) in vec3 aPos;
 layout(location=1) in vec3 aNormal;
 layout(location=2) in vec3 aColor;
 uniform mat4 uVP;
+uniform mat4 uModel;
 uniform float uTime;
 uniform float uWater;
 out vec3 vWorld;
@@ -1171,8 +1207,9 @@ void main(){
   if (uWater > 0.5) {
     p.y += sin(p.x * 2.7 + uTime * 1.4) * 0.006 + sin(p.z * 3.1 - uTime * 1.1) * 0.004;
   }
+  p = (uModel * vec4(p, 1.0)).xyz;
   vWorld = p;
-  vN = normalize(aNormal);
+  vN = normalize(mat3(uModel) * aNormal);
   vC = aColor;
   gl_Position = uVP * vec4(p, 1.0);
 }`;
@@ -1674,6 +1711,7 @@ void main(){
     if (!gl) throw new Error("无法创建 WebGL2 上下文");
     this.gl = gl;
     this.lightVP = mat4();
+    this.carModels = [];
     this.lastVP = this.lastVP || mat4();
     this.hdr = !!gl.getExtension("EXT_color_buffer_float");
     gl.getExtension("OES_texture_float_linear");
@@ -1691,7 +1729,7 @@ void main(){
     };
     this.U = {
       scene: uniformMap(gl, this.P.scene, [
-        "uVP", "uTime", "uWater", "uCamPos", "uSunDir", "uSunColor", "uSkyAmb", "uGroundAmb",
+        "uVP", "uModel", "uTime", "uWater", "uCamPos", "uSunDir", "uSunColor", "uSkyAmb", "uGroundAmb",
         "uFogColor", "uMoonColor", "uFogDen", "uWet", "uSnow", "uEmissive", "uRough", "uMetal", "uAlpha", "uDay",
         "uLampCount", "uLampPos[0]", "uLampColor[0]", "uLampPower[0]", "uShadow", "uLightVP", "uShadowOn"
       ]),
@@ -1761,7 +1799,7 @@ void main(){
       gl.enableVertexAttribArray(2);
       gl.vertexAttribPointer(2, 3, gl.FLOAT, false, stride, 24);
       gl.bindVertexArray(null);
-      this.batches.push({ name: b.name, vao, buf, count, mat: b.mat });
+      this.batches.push({ name: b.name, vao, buf, count, mat: b.mat, car: b.car, carLight: b.carLight });
     }
   };
 
@@ -2268,6 +2306,9 @@ void main(){
     gl.uniform1f(U.uMetal, m.metal || 0);
     gl.uniform1f(U.uAlpha, m.alpha != null ? m.alpha : 1);
     gl.uniform1f(U.uWater, water ? 1 : 0);
+    const model = batch.car != null && this.carModels && this.carModels[batch.car]
+      ? this.carModels[batch.car] : M_IDENT;
+    gl.uniformMatrix4fv(U.uModel, false, model);
     gl.bindVertexArray(batch.vao);
     gl.drawArrays(gl.TRIANGLES, 0, batch.count);
   };
@@ -2290,6 +2331,7 @@ void main(){
       gl.useProgram(this.P.shadow);
       gl.uniformMatrix4fv(this.U.shadow.uLightVP, false, this.lightVP);
       for (const b of this.batches) {
+        if (b.car != null) continue;
         if (b.name === "glass" || b.name === "light" || b.name === "water" || b.name === "uv") continue;
         gl.bindVertexArray(b.vao);
         gl.drawArrays(gl.TRIANGLES, 0, b.count);
@@ -2313,6 +2355,8 @@ void main(){
     this._sceneUniforms();
     const lightBatch = this.batches.find(b => b.name === "light");
     if (lightBatch) lightBatch.mat.emissive = 0.05 + 2.55 * (1 - s.day);
+    const carLightEmissive = 0.20 + 2.20 * (1 - s.day);
+    for (const b of this.batches) if (b.carLight) b.mat.emissive = carLightEmissive;
     const uvBatch = this.batches.find(b => b.name === "uv");
     const uvK = clamp((Number(this.env && this.env.uv) || 0) / 11, 0, 1);
     if (uvBatch) uvBatch.mat.emissive = uvK * 3.1;
@@ -2445,6 +2489,28 @@ void main(){
     for (const k of Object.keys(this.fxTarget)) this.fx[k] = this.fxTarget[k];
   };
 
+  WS.prototype._updateCars = function () {
+    const cars = (this.world && this.world.cars) || [];
+    const span = 64.0;
+    this.carModels = new Array(cars.length);
+    for (let i = 0; i < cars.length; i++) {
+      const c = cars[i];
+      let u = (this.time * c.speed / span + c.phase) % 1;
+      if (u < 0) u += 1;
+      let x = 0, z = 0, ry = 0;
+      if (c.axis === "x") {
+        x = c.dir > 0 ? -32 + u * span : 32 - u * span;
+        z = c.lane;
+        ry = c.dir > 0 ? 0 : Math.PI;
+      } else {
+        z = c.dir > 0 ? -32 + u * span : 32 - u * span;
+        x = c.lane;
+        ry = c.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
+      }
+      this.carModels[i] = modelMat(x, 0, z, ry);
+    }
+  };
+
   WS.prototype.render = function (timeSec, dt, nowDate) {    if (!this.ready) return;
     const d = clamp(dt || 0.016, 0.001, 0.1);
     this.time = timeSec;
@@ -2461,6 +2527,7 @@ void main(){
     f.wet += (t.wet - f.wet) * kSlow;
     f.snow += (t.snow - f.snow) * kSlow;
     this._updateSun(now);
+    this._updateCars();
     this._updateCamera(d, now);
     this._draw();
   };
