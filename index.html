@@ -1,0 +1,3751 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ATMOS° · 城市实时天气三维映射</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --ink:#eaf3f9;
+    --muted:#9ab0c0;
+    --dim:#6b8497;
+    --line:rgba(154,190,216,.16);
+    --line-strong:rgba(170,205,228,.28);
+    --panel:rgba(6,16,26,.58);
+    --panel-2:rgba(5,13,22,.82);
+    --rain:#6fd3ff;
+    --cloud:#c7d8e4;
+    --uv:#b995ff;
+    --light:#ffc46b;
+    --ok:#75e1b4;
+    --warn:#ffb35c;
+    --bad:#ff7d83;
+    --mono:"Cascadia Mono","SFMono-Regular","Roboto Mono",Consolas,monospace;
+    --sans:"Bahnschrift","Inter","HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  }
+  html,body{height:100%;overflow:hidden;background:#040a11}
+  body{
+    font-family:var(--sans);color:var(--ink);
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  }
+  button,input{font-family:inherit;color:inherit}
+  button{appearance:none;border:0;background:none;cursor:pointer}
+  ::selection{background:rgba(111,211,255,.25)}
+  #gl{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+  #gl.dragging{cursor:grabbing}
+  #veil{
+    position:fixed;inset:0;pointer-events:none;z-index:2;
+    background:
+      radial-gradient(130% 80% at 50% 0%,transparent 38%,rgba(3,9,15,.34) 100%),
+      linear-gradient(180deg,rgba(3,9,15,.55),transparent 22%,transparent 68%,rgba(3,9,15,.74));
+  }
+  #hud{position:fixed;inset:0;z-index:10;pointer-events:none;padding:26px 30px 22px}
+  #hud.hidden{opacity:0}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  /* ---------------- top ---------------- */
+  .top{display:flex;justify-content:space-between;align-items:flex-start;gap:26px}
+  .brand{pointer-events:none;min-width:320px}
+  .brand-mark{
+    font-family:var(--mono);font-size:11px;letter-spacing:.46em;color:#8fa8ba;
+    display:flex;align-items:center;gap:11px;font-weight:500;
+  }
+  .brand-mark:before{content:"";width:26px;height:1px;background:linear-gradient(90deg,transparent,var(--rain))}
+  .brand-mark span{color:var(--rain);letter-spacing:0;font-size:13px;transform:translateY(-4px)}
+  .brand h1{font-size:25px;font-weight:500;letter-spacing:.05em;margin-top:11px;line-height:1.15;text-shadow:0 4px 26px rgba(0,0,0,.55)}
+  .brand p{font-size:9px;letter-spacing:.31em;color:#7892a4;margin-top:8px;font-weight:400}
+  .top-right{display:flex;flex-direction:column;align-items:flex-end;gap:14px;pointer-events:auto}
+  .status-line{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:#7992a5}
+  .live-pill{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border:1px solid var(--line);border-radius:99px;background:rgba(6,16,26,.5);backdrop-filter:blur(16px);font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:#c8dae7;white-space:nowrap}
+  .live-pill i{width:6px;height:6px;border-radius:99px;background:var(--ok);box-shadow:0 0 11px var(--ok);animation:pulse 2.4s ease-in-out infinite}
+  .live-pill.loading i{background:var(--warn);box-shadow:0 0 11px var(--warn)}
+  .live-pill.demo i{background:var(--warn);box-shadow:0 0 11px var(--warn)}
+  .live-pill.bad i{background:var(--bad);box-shadow:0 0 11px var(--bad)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+  .clock-panel{text-align:right;min-width:270px}
+  .place-row{display:flex;justify-content:flex-end;align-items:center;gap:8px;font-size:11px;letter-spacing:.12em;color:#e0edf5;text-shadow:0 1px 8px rgba(0,0,0,.55)}
+  .pin{width:10px;height:10px;border:1px solid var(--rain);border-radius:50% 50% 50% 0;transform:rotate(-45deg);position:relative;opacity:.9}
+  .pin:after{content:"";position:absolute;inset:2.4px;border-radius:50%;background:var(--rain);opacity:.8}
+  .place-btn{font-size:11px;letter-spacing:.16em;color:#dbe9f2;padding:1px 2px;border-bottom:1px solid transparent;transition:.2s}
+  .place-btn:hover{border-color:rgba(111,211,255,.55);color:#fff}
+  .mini-btn{font-family:var(--mono);font-size:8px;letter-spacing:.12em;padding:5px 8px;border:1px solid var(--line);border-radius:6px;color:#9ab1c1;transition:.2s}
+  .mini-btn:hover{border-color:var(--line-strong);color:#eaf4fa;background:rgba(120,170,205,.08)}
+  .clock{font-family:var(--mono);font-size:46px;font-weight:300;letter-spacing:-.035em;line-height:1;margin-top:10px;color:#f1f7fb;font-variant-numeric:tabular-nums;text-shadow:0 3px 24px rgba(0,0,0,.42)}
+  .clock .sec{font-size:16px;letter-spacing:.06em;color:#b9cede;margin-left:3px}
+  .date{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:#e0edf6;margin-top:8px;text-shadow:0 1px 6px rgba(0,0,0,.45)}
+  .condition-row{display:flex;align-items:baseline;justify-content:flex-end;gap:14px;margin-top:12px}
+  .condition{font-size:12px;letter-spacing:.16em;color:#eef8ff;text-shadow:0 1px 8px rgba(0,0,0,.6)}
+  .temp{font-family:var(--mono);font-size:22px;font-weight:300;color:#fff;line-height:1}
+  .temp em{font-style:normal;font-size:10px;color:#c3d7e5;margin-left:2px}
+  .local-meta{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:#c3d7e5;margin-top:8px;line-height:1.7;text-shadow:0 1px 6px rgba(0,0,0,.45)}
+  .local-meta b{color:#e7f3fa;font-weight:400}
+
+  /* ---------------- panels ---------------- */
+  .panel{
+    position:fixed;top:170px;pointer-events:auto;
+    background:linear-gradient(160deg,rgba(9,23,35,.82),rgba(5,13,22,.68));
+    border:1px solid var(--line);border-radius:15px;
+    box-shadow:0 22px 70px -34px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.035);
+    backdrop-filter:blur(24px) saturate(125%);
+  }
+  .panel:before{content:"";position:absolute;left:18px;right:18px;top:0;height:1px;background:linear-gradient(90deg,transparent,rgba(150,205,235,.25),transparent);pointer-events:none}
+  .panel-head{display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:9px;letter-spacing:.19em;color:#92a9ba;padding-bottom:12px;border-bottom:1px solid var(--line)}
+  .panel-note{color:#6e889b;letter-spacing:.08em}
+  .readout{left:30px;width:276px;padding:17px 19px 7px;top:170px}
+  .reading{padding:13px 0 12px;border-bottom:1px solid rgba(154,190,216,.09)}
+  .reading:last-child{border-bottom:0}
+  .reading-head{display:flex;align-items:center;justify-content:space-between}
+  .reading-head .label{font-size:10.5px;letter-spacing:.15em;color:#b7cbd9}
+  .tag{font-family:var(--mono);font-size:7px;letter-spacing:.18em;padding:3px 6px;border:1px solid;border-radius:4px;opacity:.85}
+  .tag.rain{color:var(--rain);border-color:rgba(111,211,255,.28);background:rgba(111,211,255,.06)}
+  .tag.cloud{color:var(--cloud);border-color:rgba(199,216,228,.24);background:rgba(199,216,228,.05)}
+  .tag.uv{color:var(--uv);border-color:rgba(185,149,255,.28);background:rgba(185,149,255,.06)}
+  .tag.light{color:var(--light);border-color:rgba(255,196,107,.28);background:rgba(255,196,107,.06)}
+  .reading-main{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:5px}
+  .big-val{font-family:var(--mono);font-size:29px;font-weight:300;line-height:1;letter-spacing:-.04em;font-variant-numeric:tabular-nums;color:#f3f9fc}
+  .big-val small{font-size:9px;letter-spacing:.05em;color:#829bac;font-weight:400;margin-left:4px}
+  .side-note{font-family:var(--mono);font-size:8px;line-height:1.55;letter-spacing:.04em;color:#7d95a6;text-align:right;white-space:nowrap}
+  .side-note b{font-weight:400;color:#c4d5e0}
+  .meter{height:2px;background:rgba(160,195,220,.11);margin-top:10px;overflow:hidden;border-radius:2px}
+  .meter i{display:block;height:100%;width:0%;border-radius:2px;transition:width .8s cubic-bezier(.2,.7,.2,1)}
+  .meter.rain i{background:var(--rain);box-shadow:0 0 9px rgba(111,211,255,.55)}
+  .meter.cloud i{background:var(--cloud);box-shadow:0 0 9px rgba(199,216,228,.35)}
+  .meter.uv i{background:var(--uv);box-shadow:0 0 9px rgba(185,149,255,.55)}
+  .meter.light i{background:var(--light);box-shadow:0 0 9px rgba(255,196,107,.5)}
+  .mapping{font-family:var(--mono);font-size:7.5px;letter-spacing:.075em;color:#5f788a;margin-top:7px;display:flex;align-items:center;gap:6px}
+  .mapping:before{content:"↳";color:#5f788a;font-size:9px}
+  .segbar{display:flex;gap:2px;margin-top:8px;height:3px}
+  .segbar i{background:rgba(199,216,228,.15);border-radius:2px;transition:transform .8s,background .8s}
+  .cloud-legend{display:flex;gap:9px;margin-top:6px;font-family:var(--mono);font-size:6.5px;letter-spacing:.04em;color:#718a9c}
+  .cloud-legend span{display:flex;align-items:center;gap:3px}
+  .cloud-legend em{width:3px;height:3px;border-radius:1px;background:#8ba4b6;font-style:normal}
+  .uv-level{color:var(--ok)}
+  .uv-level.mid{color:var(--warn)}
+  .uv-level.high{color:#ff926f}
+  .uv-level.extreme{color:#ff6e8b}
+
+  /* ---------------- forecast ---------------- */
+  .forecast{right:30px;width:352px;top:256px;padding:17px 19px 14px}
+  .tabs{display:flex;gap:4px;margin:13px 0 8px}
+  .tabs button{font-family:var(--mono);font-size:8px;letter-spacing:.13em;color:#7f98aa;border:1px solid transparent;padding:5px 8px;border-radius:5px;transition:.2s}
+  .tabs button:hover{color:#cfe2ee}
+  .tabs button.on{color:#eaf6fc;background:rgba(160,200,225,.09);border-color:var(--line)}
+  #chart{display:block;width:100%;height:136px;margin-top:3px;overflow:visible}
+  .chart-foot{display:flex;justify-content:space-between;gap:10px;font-family:var(--mono);font-size:8px;letter-spacing:.055em;color:#859eae;margin-top:7px;min-height:12px}
+  .chart-foot b{font-weight:400;color:#d7e6ef}
+  .map-key{border-top:1px solid var(--line);margin-top:13px;padding-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px 10px}
+  .key{display:flex;align-items:flex-start;gap:7px;font-family:var(--mono);font-size:7.5px;line-height:1.5;letter-spacing:.035em;color:#7f98a9}
+  .key i{flex:0 0 auto;width:4px;height:4px;border-radius:99px;margin-top:3px;box-shadow:0 0 8px currentColor}
+  .key i.rain{background:var(--rain);color:var(--rain)}
+  .key i.cloud{background:var(--cloud);color:var(--cloud)}
+  .key i.uv{background:var(--uv);color:var(--uv)}
+  .key i.light{background:var(--light);color:var(--light)}
+
+  /* ---------------- markers ---------------- */
+  #markers{position:fixed;inset:0;z-index:7;pointer-events:none;overflow:hidden}
+  .marker{position:absolute;left:-999px;top:-999px;display:flex;align-items:center;gap:0;pointer-events:auto;cursor:help;opacity:0;transition:opacity .35s;white-space:nowrap;will-change:transform,left,top}
+  .marker.on{opacity:1}
+  .marker .mdot{width:8px;height:8px;border-radius:99px;position:relative;flex:0 0 auto;background:var(--rain);box-shadow:0 0 0 1px rgba(255,255,255,.28),0 0 16px currentColor}
+  .marker .mdot:after{content:"";position:absolute;inset:-5px;border:1px solid currentColor;border-radius:50%;opacity:.35;animation:markPulse 3s ease-out infinite}
+  @keyframes markPulse{0%{transform:scale(.5);opacity:.5}70%,100%{transform:scale(1.5);opacity:0}}
+  .marker .mline{width:23px;height:1px;background:linear-gradient(90deg,currentColor,transparent);opacity:.45}
+  .marker .mtag{padding:6px 9px;border:1px solid var(--line);border-radius:6px;background:rgba(4,12,20,.72);backdrop-filter:blur(10px);font-family:var(--mono);font-size:8px;letter-spacing:.07em;color:#d3e4ee;display:flex;gap:7px;align-items:baseline}
+  .marker .mtag b{font-size:10px;font-weight:400;color:#fff}
+  .marker .mtag em{font-style:normal;color:#7f98a9;font-size:7px}
+  .marker.flip{flex-direction:row-reverse}
+  .marker.flip .mline{background:linear-gradient(270deg,currentColor,transparent)}
+  .marker.k-rain{color:var(--rain)} .marker.k-rain .mdot{background:var(--rain)}
+  .marker.k-cloud{color:var(--cloud)} .marker.k-cloud .mdot{background:var(--cloud)}
+  .marker.k-uv{color:var(--uv)} .marker.k-uv .mdot{background:var(--uv)}
+  .marker.k-light{color:var(--light)} .marker.k-light .mdot{background:var(--light)}
+  .marker.k-temp{color:#7ee0b8} .marker.k-temp .mdot{background:#7ee0b8}
+  #markers.off .marker{display:none}
+
+  /* ---------------- bottom ---------------- */
+  .bottom{position:fixed;left:30px;right:30px;bottom:22px;display:flex;justify-content:space-between;align-items:flex-end;gap:20px;pointer-events:none}
+  .controls{display:flex;align-items:center;gap:6px;flex-wrap:wrap;pointer-events:auto;max-width:calc(100% - 360px)}
+  .ctrl{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:rgba(6,16,26,.55);backdrop-filter:blur(14px);color:#a9bdcc;transition:.22s;white-space:nowrap}
+  .ctrl:hover{border-color:var(--line-strong);color:#eff8fc;background:rgba(26,48,64,.7)}
+  .ctrl.on{color:#eaf7fd;border-color:rgba(111,211,255,.42);background:rgba(111,211,255,.1);box-shadow:inset 0 0 18px rgba(111,211,255,.045)}
+  .ctrl .count{color:#6d8798;font-size:7.5px;margin-left:4px}
+  .divider{width:1px;height:15px;background:var(--line);margin:0 4px}
+  .search-wrap{position:relative;pointer-events:auto;width:292px;flex:0 0 auto}
+  .search-wrap input{width:100%;height:34px;padding:0 36px 0 12px;background:rgba(6,16,26,.62);border:1px solid var(--line);border-radius:8px;outline:none;font-family:var(--mono);font-size:9px;letter-spacing:.08em;color:#e2eef5;backdrop-filter:blur(14px);transition:.22s}
+  .search-wrap input::placeholder{color:#637f92}
+  .search-wrap input:focus{border-color:rgba(111,211,255,.5);background:rgba(8,21,33,.85);box-shadow:0 0 0 3px rgba(111,211,255,.06)}
+  .search-wrap .go{position:absolute;right:4px;top:4px;width:26px;height:26px;border-radius:5px;color:#8fa8ba;font-family:var(--mono);font-size:14px;transition:.2s}
+  .search-wrap .go:hover{background:rgba(111,211,255,.1);color:var(--rain)}
+  .search-results{position:absolute;bottom:calc(100% + 8px);left:0;right:0;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;backdrop-filter:blur(24px);overflow:hidden;display:none;box-shadow:0 18px 44px -18px #000}
+  .search-results.on{display:block}
+  .search-results .sr-h{font-family:var(--mono);font-size:7px;letter-spacing:.16em;color:#70899b;padding:9px 11px 6px}
+  .sr-item{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:8px 11px;text-align:left;font-size:10px;color:#d5e5ef;border-top:1px solid rgba(154,190,216,.06)}
+  .sr-item:hover,.sr-item:focus{background:rgba(111,211,255,.08)}
+  .sr-item small{font-family:var(--mono);font-size:7.5px;letter-spacing:.04em;color:#7891a3;white-space:nowrap}
+  .sr-empty{padding:11px;font-family:var(--mono);font-size:8px;color:#7e98aa}
+  .stamp{position:fixed;right:30px;bottom:64px;font-family:var(--mono);font-size:7px;letter-spacing:.12em;color:#547084;text-align:right;pointer-events:none;line-height:1.7}
+  .stamp b{font-weight:400;color:#7792a5}
+  .hint{position:fixed;left:50%;bottom:72px;transform:translateX(-50%);font-family:var(--mono);font-size:8px;letter-spacing:.1em;color:#7690a2;padding:7px 12px;border:1px solid rgba(154,190,216,.1);border-radius:99px;background:rgba(5,13,21,.45);backdrop-filter:blur(12px);pointer-events:none;transition:opacity .5s;white-space:nowrap}
+  .hint.gone{opacity:0}
+  .mobile-stats{display:none}
+
+  /* ---------------- overlays ---------------- */
+  #toast{position:fixed;left:50%;top:96px;transform:translate(-50%,-10px);z-index:60;padding:9px 14px;border-radius:7px;background:rgba(7,19,30,.92);border:1px solid var(--line);font-family:var(--mono);font-size:9px;letter-spacing:.05em;color:#d8e8f2;opacity:0;pointer-events:none;transition:.3s;backdrop-filter:blur(16px);box-shadow:0 12px 36px -12px #000;max-width:80vw;text-align:center}
+  #toast.on{opacity:1;transform:translate(-50%,0)}
+  #loading{position:fixed;inset:0;z-index:100;background:#040b12;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;transition:opacity .9s ease,visibility .9s}
+  #loading.gone{opacity:0;visibility:hidden}
+  .load-mark{font-family:var(--mono);font-size:12px;letter-spacing:.5em;color:#9db5c6;margin-left:.5em}
+  .load-mark span{color:var(--rain);letter-spacing:0;font-size:15px}
+  .load-title{font-size:17px;letter-spacing:.15em;color:#e5f1f8;font-weight:400;margin-top:5px}
+  .load-line{width:180px;height:1px;background:rgba(150,190,215,.16);overflow:hidden;margin-top:8px}
+  .load-line i{display:block;width:40%;height:100%;background:linear-gradient(90deg,transparent,var(--rain),transparent);animation:loadSlide 1.8s ease-in-out infinite}
+  @keyframes loadSlide{0%{transform:translateX(-110%)}100%{transform:translateX(360%)}}
+  .load-sub{font-family:var(--mono);font-size:7.5px;letter-spacing:.25em;color:#587487}
+  #err{position:fixed;inset:0;display:none;place-items:center;background:#040b12;z-index:120;font:12px/1.8 var(--mono);color:#ff9299;padding:40px;white-space:pre-wrap;overflow:auto}
+  .edge{position:fixed;width:24px;height:24px;border:1px solid rgba(170,200,225,.2);pointer-events:none;z-index:9}
+  .edge.tl{left:18px;top:18px;border-right:0;border-bottom:0}
+  .edge.tr{right:18px;top:18px;border-left:0;border-bottom:0}
+  .edge.bl{left:18px;bottom:18px;border-right:0;border-top:0}
+  .edge.br{right:18px;bottom:18px;border-left:0;border-top:0}
+
+  @media (max-width:1280px){
+    #hud{padding:22px 22px 18px}
+    .readout{left:22px;width:252px;top:160px}
+    .forecast{right:22px;width:316px;top:246px}
+    .bottom{left:22px;right:22px;bottom:18px}
+    .stamp{right:22px;bottom:58px}
+    .search-wrap{width:260px}
+    .controls{max-width:calc(100% - 300px)}
+    .brand h1{font-size:22px}
+    .clock{font-size:40px}
+  }
+  @media (max-width:1080px){
+    .forecast{display:none}
+    .readout{width:238px}
+    .controls{max-width:calc(100% - 280px)}
+    .brand{min-width:0}
+  }
+  @media (max-width:820px){
+    #hud{padding:18px 16px 14px}
+    .brand h1{font-size:19px;margin-top:8px}
+    .brand p{display:none}
+    .brand-mark{font-size:9px}
+    .clock{font-size:34px}
+    .clock-panel{min-width:0}
+    .status-line{display:none}
+    .place-row{font-size:10px}
+    .condition-row{margin-top:8px;gap:9px}
+    .condition{font-size:10px}
+    .temp{font-size:19px}
+    .local-meta{display:none}
+    .readout{display:none}
+    .forecast{display:none}
+    .bottom{left:16px;right:16px;bottom:14px;flex-direction:column;align-items:stretch;gap:9px}
+    .controls{max-width:100%;order:2}
+    .search-wrap{width:100%;order:1}
+    .stamp{display:none}
+    .hint{display:none}
+    .mobile-stats{display:flex;position:fixed;left:16px;right:16px;bottom:112px;justify-content:space-between;gap:5px;z-index:11;pointer-events:none}
+    .ms{flex:1;padding:8px 9px;border:1px solid var(--line);border-radius:7px;background:rgba(5,14,23,.68);backdrop-filter:blur(14px);font-family:var(--mono)}
+    .ms span{display:block;font-size:6.5px;letter-spacing:.12em;color:#7791a3;margin-bottom:3px}
+    .ms b{display:block;font-size:14px;font-weight:300;color:#eef8fc;font-variant-numeric:tabular-nums}
+    .ms em{font-style:normal;font-size:7px;color:#7690a2;margin-left:2px}
+    .top-right .status-line{display:none}
+  }
+  @media (max-width:520px){
+    .brand h1{font-size:16px}
+    .brand-mark{letter-spacing:.3em}
+    .clock{font-size:29px}
+    .place-row{gap:5px}
+    .mini-btn{padding:4px 6px}
+    .ctrl{padding:7px 8px;font-size:7.5px}
+    .divider{display:none}
+    .controls{gap:4px}
+    .mobile-stats .ms{padding:7px}
+    .ms b{font-size:12px}
+  }
+  @media (max-width:390px){
+    .top{gap:12px}
+    .brand-mark{font-size:8px;letter-spacing:.22em}
+    .brand h1{font-size:15px}
+    .clock{font-size:27px}
+    .clock .sec{font-size:12px}
+    .place-row{gap:4px}
+    .place-btn{font-size:10px}
+    .mini-btn{font-size:7px;padding:4px 5px}
+    .mobile-stats{left:12px;right:12px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+  }
+
+  /* ---------------- timeline ---------------- */
+  .timeline-wrap{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+  .timeline-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+  .timeline-label{font-family:var(--mono);font-size:8px;letter-spacing:.14em;color:#9ab0c0}
+  .timeline-now{font-family:var(--mono);font-size:8px;letter-spacing:.1em;padding:3px 9px;border:1px solid rgba(111,211,255,.35);border-radius:5px;color:var(--rain);background:rgba(111,211,255,.08);cursor:pointer;transition:.2s}
+  .timeline-now:hover{background:rgba(111,211,255,.18)}
+  .timeline-now.active{background:rgba(111,211,255,.22);border-color:var(--rain)}
+  input[type=range].tl{width:100%;height:18px;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer;display:block}
+  input[type=range].tl::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,rgba(185,149,255,.35),rgba(111,211,255,.35) 40%,rgba(111,211,255,.5) 50%,rgba(111,211,255,.35) 60%,rgba(255,196,107,.35))}
+  input[type=range].tl::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#eaf3f9;margin-top:-5px;border:2px solid var(--rain);box-shadow:0 0 10px rgba(111,211,255,.6);transition:box-shadow .2s}
+  input[type=range].tl::-webkit-slider-thumb:hover{box-shadow:0 0 16px rgba(111,211,255,.9)}
+  input[type=range].tl::-moz-range-track{height:4px;border-radius:2px;background:linear-gradient(90deg,rgba(185,149,255,.35),rgba(111,211,255,.35) 40%,rgba(111,211,255,.5) 50%,rgba(111,211,255,.35) 60%,rgba(255,196,107,.35))}
+  input[type=range].tl::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#eaf3f9;border:2px solid var(--rain);box-shadow:0 0 10px rgba(111,211,255,.6)}
+  .timeline-marks{display:flex;justify-content:space-between;margin-top:4px;font-family:var(--mono);font-size:6.5px;letter-spacing:.08em;color:#5f788a}
+  .timeline-info{font-family:var(--mono);font-size:8px;letter-spacing:.08em;color:#b8cddd;margin-top:6px;text-align:center;min-height:12px}
+</style>
+</head>
+<body>
+<canvas id="gl" aria-label="实时天气三维场景"></canvas>
+<div id="veil"></div>
+
+<div id="loading">
+  <div class="load-mark">ATMOS<span>°</span></div>
+  <div class="load-title">正在建立实时天气映射</div>
+  <div class="load-line"><i></i></div>
+  <div class="load-sub">WEBGL2 · LIVE WEATHER · OPEN-METEO</div>
+</div>
+
+<div id="hud">
+  <header class="top">
+    <div class="brand">
+      <div class="brand-mark">ATMOS<span>°</span> / WEATHER ENGINE</div>
+      <h1>城市实时天气 · 三维映射</h1>
+      <p>LIVE WEATHER, RENDERED IN REAL TIME</p>
+    </div>
+    <div class="top-right">
+      <div class="status-line">
+        <span class="live-pill loading" id="livePill"><i></i><b id="liveText">连接中</b></span>
+        <span>OPEN-METEO / NO KEY</span>
+      </div>
+      <section class="clock-panel">
+        <div class="place-row">
+          <span class="pin"></span>
+          <button class="place-btn" id="placeBtn" title="点击重新定位">上海</button>
+          <button class="mini-btn" id="locateBtn">定位</button>
+        </div>
+        <div class="clock" id="clock">--:--<span class="sec">--</span></div>
+        <div class="date" id="date">正在同步当地时间</div>
+        <div class="condition-row">
+          <span class="condition" id="condition">—</span>
+          <span class="temp"><b id="temp">--</b><em>°C</em></span>
+        </div>
+        <div class="local-meta" id="localMeta">体感 — · 湿度 — · 风 —</div>
+      </section>
+    </div>
+  </header>
+
+  <aside class="panel readout" aria-label="环境读数">
+    <div class="panel-head"><span>环境读数 / LIVE</span><span class="panel-note" id="dataTime">--:--</span></div>
+
+    <div class="reading">
+      <div class="reading-head"><span class="label">降水强度</span><span class="tag rain">RAIN</span></div>
+      <div class="reading-main">
+        <div class="big-val"><b id="rainVal">0.0</b><small>mm/h</small></div>
+        <div class="side-note">今日累计 <b id="rainDay">0.0</b> mm<br>未来 1h <b id="rainNext">0.0</b> mm</div>
+      </div>
+      <div class="meter rain"><i id="rainMeter"></i></div>
+      <div class="mapping">雨丝密度 · 下落速度 · 地面湿润度</div>
+    </div>
+
+    <div class="reading">
+      <div class="reading-head"><span class="label">云量</span><span class="tag cloud">CLOUD</span></div>
+      <div class="reading-main">
+        <div class="big-val"><b id="cloudVal">0</b><small>%</small></div>
+        <div class="side-note">低云 <b id="cloudLow">0%</b><br>中云 <b id="cloudMid">0%</b> · 高云 <b id="cloudHigh">0%</b></div>
+      </div>
+      <div class="meter cloud"><i id="cloudMeter"></i></div>
+      <div class="segbar"><i id="segLow"></i><i id="segMid"></i><i id="segHigh"></i></div>
+      <div class="mapping">云团数量 · 云层高度 · 天空遮蔽</div>
+    </div>
+
+    <div class="reading">
+      <div class="reading-head"><span class="label">紫外线强度</span><span class="tag uv">UV INDEX</span></div>
+      <div class="reading-main">
+        <div class="big-val"><b id="uvVal">0.0</b><small>UVI</small></div>
+        <div class="side-note">等级 <b class="uv-level" id="uvLevel">无</b><br>今日峰值 <b id="uvMax">0.0</b></div>
+      </div>
+      <div class="meter uv"><i id="uvMeter"></i></div>
+      <div class="mapping">日晕强度 · 紫色光环 · 天空通透度</div>
+    </div>
+
+    <div class="reading">
+      <div class="reading-head"><span class="label">光照强度</span><span class="tag light">LIGHT</span></div>
+      <div class="reading-main">
+        <div class="big-val"><b id="lightVal">0</b><small>W/m²</small></div>
+        <div class="side-note">约 <b id="luxVal">0</b> klx<br><b id="dayState">夜间</b></div>
+      </div>
+      <div class="meter light"><i id="lightMeter"></i></div>
+      <div class="mapping">主光强度 · 曝光 · 阴影清晰度</div>
+    </div>
+  </aside>
+
+  <aside class="panel forecast" aria-label="未来24小时天气趋势">
+    <div class="panel-head"><span>未来 24 小时 / TREND</span><span class="panel-note" id="trendZone">--</span></div>
+    <div class="tabs" role="tablist">
+      <button data-tab="rain" class="on" role="tab">降水</button>
+      <button data-tab="cloud" role="tab">云量</button>
+      <button data-tab="uv" role="tab">紫外线</button>
+    </div>
+    <canvas id="chart"></canvas>
+    <div class="chart-foot"><span id="peakText">—</span><span id="sumText">—</span></div>
+    <div class="map-key">
+      <div class="key"><i class="rain"></i><span>降水 → 雨幕密度 / 速度</span></div>
+      <div class="key"><i class="cloud"></i><span>云量 → 云层体积 / 遮蔽</span></div>
+      <div class="key"><i class="uv"></i><span>紫外线 → 日晕光晕</span></div>
+      <div class="key"><i class="light"></i><span>光照 → 主光 / 空气通透</span></div>
+    </div>
+    <div class="timeline-wrap">
+      <div class="timeline-head">
+        <span class="timeline-label">时间轴 / TIMELINE</span>
+        <button class="timeline-now" id="tlNow">回到现在</button>
+      </div>
+      <input type="range" class="tl" id="tlSlider" min="0" max="119" value="0" step="1">
+      <div class="timeline-marks">
+        <span>3天前</span><span>昨天</span><span>现在</span><span>明天</span><span>2天后</span>
+      </div>
+      <div class="timeline-info" id="tlInfo">当前实时天气</div>
+    </div>
+  </aside>
+
+  <div id="markers" aria-hidden="true"></div>
+
+  <footer class="bottom">
+    <div class="controls">
+      <button class="ctrl on" id="orbitBtn">自动巡游</button>
+      <div class="divider"></div>
+      <button class="ctrl view-btn on" data-view="0">全景</button>
+      <button class="ctrl view-btn" data-view="1">云层</button>
+      <button class="ctrl view-btn" data-view="2">地表</button>
+      <button class="ctrl on" id="labelsBtn">标注</button>
+      <div class="divider"></div>
+      <button class="ctrl" id="refreshBtn">刷新 <span class="count" id="refreshIn">--:--</span></button>
+    </div>
+    <div class="search-wrap">
+      <input id="cityInput" type="text" autocomplete="off" spellcheck="false" placeholder="搜索城市，回车切换观测点">
+      <button class="go" id="searchBtn" aria-label="搜索城市">↗</button>
+      <div class="search-results" id="searchResults"></div>
+    </div>
+  </footer>
+
+  <div class="mobile-stats">
+    <div class="ms"><span>降水 / RAIN</span><b id="mRain">0.0</b><em>mm/h</em></div>
+    <div class="ms"><span>云量 / CLOUD</span><b id="mCloud">0</b><em>%</em></div>
+    <div class="ms"><span>UV / UV</span><b id="mUV">0.0</b><em>UVI</em></div>
+    <div class="ms"><span>光照 / LIGHT</span><b id="mLight">0</b><em>W/m²</em></div>
+  </div>
+
+  <div class="stamp">MODEL NOT TO SCALE · REALTIME MAPPING<br>DATA <b>OPEN-METEO</b> · AUTO REFRESH <b>10 MIN</b></div>
+  <div class="hint" id="hint">拖拽旋转 · 滚轮缩放 · 点击标注查看数据映射</div>
+  <div class="edge tl"></div><div class="edge tr"></div><div class="edge bl"></div><div class="edge br"></div>
+</div>
+
+<div id="toast"></div>
+<div id="err"></div>
+
+<script>
+"use strict";
+/* =========================================================================
+   ATMOS° — WebGL2 floating weather observatory.
+   Part 1: math, procedural geometry, scene graph. Rendering in weather-gl.js.
+   ========================================================================= */
+(() => {
+  const D2R = Math.PI / 180;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const mix = (a, b, t) => a + (b - a) * t;
+  const smoothstep = (a, b, x) => {
+    const t = clamp((x - a) / (b - a || 1e-6), 0, 1);
+    return t * t * (3 - 2 * t);
+  };
+  const fract = x => x - Math.floor(x);
+
+  /* ----------------------------- vectors ----------------------------- */
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const mulS = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const len = a => Math.hypot(a[0], a[1], a[2]);
+  const norm = a => {
+    const l = len(a) || 1;
+    return [a[0] / l, a[1] / l, a[2] / l];
+  };
+  const lerpV = (a, b, t) => [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
+  const rotateY = (p, a) => {
+    const c = Math.cos(a), s = Math.sin(a);
+    return [p[0] * c + p[2] * s, p[1], -p[0] * s + p[2] * c];
+  };
+
+  /* ----------------------------- mat4 ------------------------------- */
+  function m4() {
+    return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+  }
+  function mul(out, a, b) {
+    for (let c = 0; c < 4; c++) {
+      for (let r = 0; r < 4; r++) {
+        out[c * 4 + r] =
+          a[r] * b[c * 4] +
+          a[4 + r] * b[c * 4 + 1] +
+          a[8 + r] * b[c * 4 + 2] +
+          a[12 + r] * b[c * 4 + 3];
+      }
+    }
+    return out;
+  }
+  function perspective(out, fovy, aspect, near, far) {
+    const f = 1 / Math.tan(fovy / 2);
+    out.fill(0);
+    out[0] = f / aspect;
+    out[5] = f;
+    out[10] = (far + near) / (near - far);
+    out[11] = -1;
+    out[14] = (2 * far * near) / (near - far);
+    return out;
+  }
+  function ortho(out, l, r, b, t, n, f) {
+    out.fill(0);
+    out[0] = 2 / (r - l);
+    out[5] = 2 / (t - b);
+    out[10] = -2 / (f - n);
+    out[12] = -(r + l) / (r - l);
+    out[13] = -(t + b) / (t - b);
+    out[14] = -(f + n) / (f - n);
+    out[15] = 1;
+    return out;
+  }
+  function lookAt(out, eye, center, up) {
+    const z = norm(sub(eye, center));
+    const x = norm(cross(up, z));
+    const y = cross(z, x);
+    out[0] = x[0]; out[1] = y[0]; out[2] = z[0]; out[3] = 0;
+    out[4] = x[1]; out[5] = y[1]; out[6] = z[1]; out[7] = 0;
+    out[8] = x[2]; out[9] = y[2]; out[10] = z[2]; out[11] = 0;
+    out[12] = -dot(x, eye); out[13] = -dot(y, eye); out[14] = -dot(z, eye); out[15] = 1;
+    return out;
+  }
+  function transformPoint(m, p) {
+    const x = p[0], y = p[1], z = p[2];
+    return [
+      m[0] * x + m[4] * y + m[8] * z + m[12],
+      m[1] * x + m[5] * y + m[9] * z + m[13],
+      m[2] * x + m[6] * y + m[10] * z + m[14]
+    ];
+  }
+
+  /* ----------------------------- colors ----------------------------- */
+  function s2l(c) {
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  }
+  function C(hex) {
+    const h = String(hex).replace("#", "");
+    const n = parseInt(h.length === 3 ? h.split("").map(x => x + x).join("") : h, 16);
+    return [s2l(((n >> 16) & 255) / 255), s2l(((n >> 8) & 255) / 255), s2l((n & 255) / 255)];
+  }
+  function cmix(a, b, t) {
+    return [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
+  }
+  function cmul(a, s) {
+    return [a[0] * s, a[1] * s, a[2] * s];
+  }
+  function cshift(a, d) {
+    return [clamp(a[0] + d, 0, 2), clamp(a[1] + d, 0, 2), clamp(a[2] + d, 0, 2)];
+  }
+
+  const PAL = {
+    mossA: C("#355043"), mossB: C("#506b55"), mossC: C("#72836a"), mossD: C("#3d5648"),
+    soil: C("#3b3a32"), stone: C("#6b6c61"), stoneDark: C("#4b4d47"),
+    rockA: C("#3b4248"), rockB: C("#4e565b"), rockC: C("#2a3035"), rockD: C("#5b6164"),
+    wall: C("#b5b1a0"), wallShade: C("#94937f"), wallLight: C("#cbc6b1"),
+    roof: C("#2b363d"), metal: C("#64737b"), metalDark: C("#303b43"), metalLight: C("#8a9ba4"),
+    trim: C("#9eafb6"), trunk: C("#534437"),
+    treeA: C("#355f47"), treeB: C("#477a5a"), treeC: C("#284a39"),
+    water: C("#0c2b38"), waterEdge: C("#183f4b"),
+    glass: C("#78a9bd"), warm: C("#ffb25c"), warmHi: C("#ffdca2"), amber: C("#ff8a3c"),
+    red: C("#ff5848"), cyan: C("#69d2ff"), white: C("#e8f2f6"),
+    path: C("#7c7b6d"), pathDark: C("#5c5d53"),
+    // —— 城市建筑材质 ——
+    concreteA: C("#5a6570"), concreteB: C("#434c56"), concreteC: C("#6b7682"),
+    concreteDark: C("#32383f"), asphalt: C("#1e2329"), sidewalk: C("#4a525a"),
+    glassBlue: C("#3a6078"), glassTeal: C("#2d5566"), glassDark: C("#1e3542"),
+    glassTop: C("#8fb8cc"), steel: C("#7a8a96"), steelDark: C("#4a5560"),
+    windowWarm: C("#ffc978"), windowCool: C("#9ad4ff"), windowDim: C("#6a7a88"),
+    tower: C("#546e7a"), towerDark: C("#37474f")
+  };
+
+  /* ----------------------------- noise ------------------------------ */
+  function hash2(x, y) {
+    return fract(Math.sin(x * 127.1 + y * 311.7) * 43758.5453123);
+  }
+  function vnoise(x, y) {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    const xf = x - xi, yf = y - yi;
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const a = hash2(xi, yi), b = hash2(xi + 1, yi), c = hash2(xi, yi + 1), d = hash2(xi + 1, yi + 1);
+    return mix(mix(a, b, u), mix(c, d, u), v);
+  }
+  function fbm(x, y, oct = 4) {
+    let v = 0, a = 0.5, f = 1;
+    for (let i = 0; i < oct; i++) {
+      v += vnoise(x * f, y * f) * a;
+      f *= 2.03;
+      a *= 0.5;
+    }
+    return v;
+  }
+
+  const CITY_R = 11.5;
+  function terrainH(x, z) {
+    // 平坦城市地面：中心广场微抬，边缘缓降
+    const r = Math.hypot(x, z);
+    let h = 0;
+    h += 0.18 * (1 - smoothstep(0, 4.5, r));
+    h -= smoothstep(9.5, CITY_R, r) * 0.5;
+    h += (fbm(x * 0.6, z * 0.6, 2) - 0.5) * 0.04;
+    return h;
+  }
+  function terrainN(x, z) {
+    const e = 0.09;
+    const hl = terrainH(x - e, z), hr = terrainH(x + e, z);
+    const hd = terrainH(x, z - e), hu = terrainH(x, z + e);
+    return norm([hl - hr, 2 * e, hd - hu]);
+  }
+
+  /* ----------------------------- builder ---------------------------- */
+  class MeshBuilder {
+    constructor() {
+      this.p = [];
+      this.n = [];
+      this.c = [];
+    }
+    v(p, n, c) {
+      this.p.push(p[0], p[1], p[2]);
+      this.n.push(n[0], n[1], n[2]);
+      this.c.push(c[0], c[1], c[2]);
+    }
+    tri(a, b, c, col, normal) {
+      const nn = normal || norm(cross(sub(b, a), sub(c, a)));
+      this.v(a, nn, col); this.v(b, nn, col); this.v(c, nn, col);
+    }
+    triC(a, b, c, ca, cb, cc, normal) {
+      const nn = normal || norm(cross(sub(b, a), sub(c, a)));
+      this.v(a, nn, ca); this.v(b, nn, cb); this.v(c, nn, cc);
+    }
+    quad(a, b, c, d, col, normal) {
+      const nn = normal || norm(cross(sub(b, a), sub(c, a)));
+      this.v(a, nn, col); this.v(b, nn, col); this.v(c, nn, col);
+      this.v(a, nn, col); this.v(c, nn, col); this.v(d, nn, col);
+    }
+    quadC(a, b, c, d, ca, cb, cc, cd, normal) {
+      const nn = normal || norm(cross(sub(b, a), sub(c, a)));
+      this.v(a, nn, ca); this.v(b, nn, cb); this.v(c, nn, cc);
+      this.v(a, nn, ca); this.v(c, nn, cc); this.v(d, nn, cd);
+    }
+    quadN(a, b, c, d, na, nb, nc, nd, col) {
+      this.v(a, na, col); this.v(b, nb, col); this.v(c, nc, col);
+      this.v(a, na, col); this.v(c, nc, col); this.v(d, nd, col);
+    }
+    triN(a, b, c, na, nb, nc, col) {
+      this.v(a, na, col); this.v(b, nb, col); this.v(c, nc, col);
+    }
+    box(cx, cy, cz, sx, sy, sz, col, ry = 0, colorTop) {
+      const x = sx / 2, y = sy / 2, z = sz / 2;
+      const P = (px, py, pz) => {
+        const r = rotateY([px, py, pz], ry);
+        return [cx + r[0], cy + r[1], cz + r[2]];
+      };
+      const N = (nx, ny, nz) => rotateY([nx, ny, nz], ry);
+      const faces = [
+        [[-x, -y, z], [x, -y, z], [x, y, z], [-x, y, z], [0, 0, 1]],
+        [[x, -y, -z], [-x, -y, -z], [-x, y, -z], [x, y, -z], [0, 0, -1]],
+        [[x, -y, z], [x, -y, -z], [x, y, -z], [x, y, z], [1, 0, 0]],
+        [[-x, -y, -z], [-x, -y, z], [-x, y, z], [-x, y, -z], [-1, 0, 0]],
+        [[-x, y, z], [x, y, z], [x, y, -z], [-x, y, -z], [0, 1, 0]],
+        [[-x, -y, -z], [x, -y, -z], [x, -y, z], [-x, -y, z], [0, -1, 0]]
+      ];
+      let i = 0;
+      for (const f of faces) {
+        const fc = i === 2 ? cmul(col, 0.93) : i === 4 ? (colorTop ? cmix(col, colorTop, 0.75) : cmul(col, 1.06)) : col;
+        this.quad(P(...f[0]), P(...f[1]), P(...f[2]), P(...f[3]), fc, N(...f[4]));
+        i++;
+      }
+    }
+    cyl(cx, baseY, cz, r, h, seg, col, capTop = true, capBottom = false, topCol = null) {
+      const topY = baseY + h;
+      const step = Math.PI * 2 / seg;
+      for (let i = 0; i < seg; i++) {
+        const a0 = i * step, a1 = (i + 1) * step;
+        const c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1);
+        const p0 = [cx + c0 * r, baseY, cz + s0 * r];
+        const p1 = [cx + c1 * r, baseY, cz + s1 * r];
+        const p2 = [cx + c1 * r, topY, cz + s1 * r];
+        const p3 = [cx + c0 * r, topY, cz + s0 * r];
+        const nn = norm([(c0 + c1) * 0.5, 0, (s0 + s1) * 0.5]);
+        const cc = cmul(col, 0.85 + 0.2 * hash2(i * 0.71, 3.1));
+        this.quad(p0, p1, p2, p3, cc, nn);
+      }
+      if (capTop) {
+        const cc = topCol || cmul(col, 1.08);
+        const center = [cx, topY, cz];
+        for (let i = 0; i < seg; i++) {
+          const a0 = i * step, a1 = (i + 1) * step;
+          this.tri(center, [cx + Math.cos(a0) * r, topY, cz + Math.sin(a0) * r], [cx + Math.cos(a1) * r, topY, cz + Math.sin(a1) * r], cc, [0, 1, 0]);
+        }
+      }
+      if (capBottom) {
+        const center = [cx, baseY, cz];
+        for (let i = 0; i < seg; i++) {
+          const a0 = i * step, a1 = (i + 1) * step;
+          this.tri(center, [cx + Math.cos(a1) * r, baseY, cz + Math.sin(a1) * r], [cx + Math.cos(a0) * r, baseY, cz + Math.sin(a0) * r], cmul(col, 0.8), [0, -1, 0]);
+        }
+      }
+    }
+    disc(cx, y, cz, r, seg, col, up = true) {
+      const center = [cx, y, cz];
+      for (let i = 0; i < seg; i++) {
+        const a0 = i / seg * Math.PI * 2, a1 = (i + 1) / seg * Math.PI * 2;
+        const p0 = [cx + Math.cos(a0) * r, y, cz + Math.sin(a0) * r];
+        const p1 = [cx + Math.cos(a1) * r, y, cz + Math.sin(a1) * r];
+        if (up) this.tri(center, p0, p1, col, [0, 1, 0]);
+        else this.tri(center, p1, p0, col, [0, -1, 0]);
+      }
+    }
+    cone(cx, baseY, cz, r, h, seg, col) {
+      const apex = [cx, baseY + h, cz];
+      const step = Math.PI * 2 / seg;
+      for (let i = 0; i < seg; i++) {
+        const a0 = i * step, a1 = (i + 1) * step;
+        const p0 = [cx + Math.cos(a0) * r, baseY, cz + Math.sin(a0) * r];
+        const p1 = [cx + Math.cos(a1) * r, baseY, cz + Math.sin(a1) * r];
+        const cc = cmul(col, 0.9 + 0.18 * hash2(i * 1.7, 4.2));
+        this.tri(apex, p0, p1, cc);
+      }
+      const center = [cx, baseY, cz];
+      for (let i = 0; i < seg; i++) {
+        const a0 = i * step, a1 = (i + 1) * step;
+        this.tri(center, [cx + Math.cos(a1) * r, baseY, cz + Math.sin(a1) * r], [cx + Math.cos(a0) * r, baseY, cz + Math.sin(a0) * r], cmul(col, 0.75), [0, -1, 0]);
+      }
+    }
+    hemiSphere(cx, cy, cz, r, seg, rings, col, topOnly = true, glass = false) {
+      const maxPhi = topOnly ? Math.PI / 2 : Math.PI;
+      for (let i = 0; i < rings; i++) {
+        const p0 = i / rings * maxPhi, p1 = (i + 1) / rings * maxPhi;
+        for (let j = 0; j < seg; j++) {
+          const t0 = j / seg * Math.PI * 2, t1 = (j + 1) / seg * Math.PI * 2;
+          const P = (phi, th) => [cx + r * Math.sin(phi) * Math.cos(th), cy + r * Math.cos(phi), cz + r * Math.sin(phi) * Math.sin(th)];
+          const N = (phi, th) => [Math.sin(phi) * Math.cos(th), Math.cos(phi), Math.sin(phi) * Math.sin(th)];
+          const a = P(p0, t0), b = P(p0, t1), c = P(p1, t1), d = P(p1, t0);
+          const na = N(p0, t0), nb = N(p0, t1), nc = N(p1, t1), nd = N(p1, t0);
+          const shade = 0.92 + 0.14 * hash2(i, j);
+          this.quadN(a, b, c, d, na, nb, nc, nd, cmul(col, shade));
+        }
+      }
+    }
+    sphere(cx, cy, cz, r, seg, rings, col) {
+      for (let i = 0; i < rings; i++) {
+        const p0 = i / rings * Math.PI, p1 = (i + 1) / rings * Math.PI;
+        for (let j = 0; j < seg; j++) {
+          const t0 = j / seg * Math.PI * 2, t1 = (j + 1) / seg * Math.PI * 2;
+          const P = (phi, th) => [cx + r * Math.sin(phi) * Math.cos(th), cy + r * Math.cos(phi), cz + r * Math.sin(phi) * Math.sin(th)];
+          const N = (phi, th) => [Math.sin(phi) * Math.cos(th), Math.cos(phi), Math.sin(phi) * Math.sin(th)];
+          const a = P(p0, t0), b = P(p0, t1), c = P(p1, t1), d = P(p1, t0);
+          this.quadN(a, b, c, d, N(p0, t0), N(p0, t1), N(p1, t1), N(p1, t0), cmul(col, 0.93 + 0.14 * hash2(i, j)));
+        }
+      }
+    }
+    torus(cx, cy, cz, R, r, seg, tube, col) {
+      for (let i = 0; i < seg; i++) {
+        const u0 = i / seg * Math.PI * 2, u1 = (i + 1) / seg * Math.PI * 2;
+        for (let j = 0; j < tube; j++) {
+          const v0 = j / tube * Math.PI * 2, v1 = (j + 1) / tube * Math.PI * 2;
+          const P = (u, v) => [cx + (R + r * Math.cos(v)) * Math.cos(u), cy + r * Math.sin(v), cz + (R + r * Math.cos(v)) * Math.sin(u)];
+          const N = (u, v) => [Math.cos(v) * Math.cos(u), Math.sin(v), Math.cos(v) * Math.sin(u)];
+          this.quadN(P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1), N(u0, v0), N(u1, v0), N(u1, v1), N(u0, v1), col);
+        }
+      }
+    }
+  }
+
+  /* ----------------------------- scene ------------------------------ */
+  function buildWorld() {
+    const terrain = new MeshBuilder();
+    const rock = new MeshBuilder();
+    const paint = new MeshBuilder();
+    const metal = new MeshBuilder();
+    const foliage = new MeshBuilder();
+    const water = new MeshBuilder();
+    const light = new MeshBuilder();
+    const glass = new MeshBuilder();
+    const detail = new MeshBuilder();
+
+    /* ---- 城市地面：圆形混凝土广场 ---- */
+    const SEG = 72;
+    const groundY = terrainH(0, 0) + 0.02;
+    for (let j = 0; j < SEG; j++) {
+      const a0 = j / SEG * Math.PI * 2;
+      const a1 = (j + 1) / SEG * Math.PI * 2;
+      const p0 = [Math.cos(a0) * CITY_R, groundY, Math.sin(a0) * CITY_R];
+      const p1 = [Math.cos(a1) * CITY_R, groundY, Math.sin(a1) * CITY_R];
+      terrain.triC([0, groundY, 0], p0, p1,
+        terrainColor(0, 0),
+        terrainColor(Math.cos(a0) * CITY_R * 0.6, Math.sin(a0) * CITY_R * 0.6),
+        terrainColor(Math.cos(a1) * CITY_R * 0.6, Math.sin(a1) * CITY_R * 0.6),
+        [0, 1, 0]);
+    }
+
+    /* ---- 道路网格（沥青色长条） ---- */
+    const roadY = groundY + 0.012;
+    for (let i = -3; i <= 3; i++) {
+      const p = i * 3.4;
+      if (Math.abs(p) > CITY_R - 0.8) continue;
+      const halfLen = Math.sqrt(Math.max(0.1, CITY_R * CITY_R - p * p)) - 0.3;
+      detail.box(0, roadY, p, halfLen * 2, 0.025, 0.55, PAL.asphalt, 0);
+      detail.box(p, roadY, 0, 0.55, 0.025, halfLen * 2, PAL.asphalt, 0);
+    }
+
+    /* ---- 建筑生成器 ---- */
+    function addTower(x, z, w, d, h, bodyCol, seed, opts) {
+      opts = opts || {};
+      const y = terrainH(x, z);
+      const glassy = !!opts.glass;
+      // 主体
+      if (glassy) {
+        glass.box(x, y + h / 2, z, w, h, d, bodyCol, 0, PAL.glassTop);
+      } else {
+        paint.box(x, y + h / 2, z, w, h, d, bodyCol, 0, cmul(bodyCol, 1.1));
+      }
+      // 屋顶
+      metal.box(x, y + h + 0.06, z, w * 0.92, 0.12, d * 0.92, PAL.roof, 0);
+      // 屋顶设备箱
+      if (hash2(seed, 9) > 0.35) {
+        metal.box(x + w * 0.18, y + h + 0.2, z - d * 0.12, w * 0.28, 0.18, d * 0.22, PAL.steelDark, 0);
+      }
+      // 窗户网格
+      const floors = Math.max(2, Math.floor(h / 0.42));
+      const colsF = Math.max(2, Math.floor(w / 0.34));
+      const colsS = Math.max(2, Math.floor(d / 0.34));
+      for (let f = 0; f < floors; f++) {
+        const wy = y + 0.32 + f * 0.4;
+        if (wy > y + h - 0.28) break;
+        for (let c = 0; c < colsF; c++) {
+          const wx = x - w / 2 + 0.24 + c * (w - 0.48) / Math.max(1, colsF - 1);
+          // 南立面
+          if (hash2(seed * 31 + f, c) > 0.40) {
+            const wc = hash2(seed * 7 + f, c) > 0.78 ? PAL.windowCool : PAL.windowWarm;
+            light.box(wx, wy, z + d / 2 + 0.014, 0.15, 0.19, 0.02, wc);
+          }
+          // 北立面
+          if (hash2(seed * 53 + f, c) > 0.55) {
+            light.box(wx, wy, z - d / 2 - 0.014, 0.15, 0.19, 0.02, PAL.windowWarm);
+          }
+        }
+        for (let c = 0; c < colsS; c++) {
+          const wz = z - d / 2 + 0.24 + c * (d - 0.48) / Math.max(1, colsS - 1);
+          if (hash2(seed * 71 + f, c) > 0.50) {
+            light.box(x + w / 2 + 0.014, wy, wz, 0.02, 0.19, 0.15, PAL.windowWarm);
+          }
+          if (hash2(seed * 83 + f, c) > 0.60) {
+            light.box(x - w / 2 - 0.014, wy, wz, 0.02, 0.19, 0.15, PAL.windowWarm);
+          }
+        }
+      }
+      // 顶部天线 + 红灯
+      if (h > 5.5) {
+        metal.cyl(x, y + h + 0.12, z, 0.025, 0.85, 6, PAL.steel);
+        light.sphere(x, y + h + 1.0, z, 0.045, PAL.red, 8, 5);
+      }
+    }
+
+    /* ---- 地标超高层 ---- */
+    addTower(0, 0, 1.5, 1.5, 11.0, PAL.tower, 1, { glass: true });
+    metal.cyl(0, terrainH(0, 0) + 11.1, 0, 0.09, 1.4, 8, PAL.steel);
+    light.sphere(0, terrainH(0, 0) + 12.6, 0, 0.07, PAL.cyan, 10, 6);
+
+    addTower(-3.4, 1.6, 1.25, 1.05, 8.0, PAL.glassBlue, 2, { glass: true });
+    addTower(3.0, -2.2, 1.15, 1.35, 6.8, PAL.concreteC, 3, {});
+
+    /* ---- 中高层建筑群 ---- */
+    const mids = [
+      [-5.2, -3.6, 1.0, 0.9, 4.4, 4],
+      [-4.6, 3.9, 1.15, 1.0, 3.6, 5],
+      [-2.1, 5.4, 0.95, 0.9, 3.1, 6],
+      [4.6, 4.1, 1.25, 1.05, 5.0, 7],
+      [5.6, -0.6, 1.0, 1.15, 3.9, 8],
+      [3.9, -4.6, 1.15, 0.95, 3.3, 9],
+      [-6.0, 0.6, 0.95, 1.05, 2.9, 10],
+      [0.6, -5.6, 1.05, 0.95, 2.6, 11],
+      [-1.6, -3.9, 0.85, 0.85, 2.3, 12],
+      [1.9, 3.6, 0.95, 0.95, 3.1, 13]
+    ];
+    for (const b of mids) {
+      addTower(b[0], b[1], b[2], b[3], b[4],
+        hash2(b[5], 1) > 0.5 ? PAL.concreteA : PAL.concreteB,
+        b[5], { glass: hash2(b[5], 2) > 0.72 });
+    }
+
+    /* ---- 外围矮楼 ---- */
+    for (let k = 0; k < 14; k++) {
+      const a = k / 14 * Math.PI * 2 + 0.35;
+      const r = 7.8 + hash2(k, 1) * 1.6;
+      const x = Math.cos(a) * r;
+      const z = Math.sin(a) * r;
+      const w = 0.6 + hash2(k, 2) * 0.45;
+      const d = 0.6 + hash2(k, 3) * 0.45;
+      const h = 1.2 + hash2(k, 4) * 1.6;
+      addTower(x, z, w, d, h, PAL.concreteDark, 20 + k, {});
+    }
+
+    /* ---- 路灯 ---- */
+    const lampPositions = [];
+    const lampSpots = [
+      [-1.7, -1.7], [1.7, -1.7], [-1.7, 1.7], [1.7, 1.7],
+      [-5.0, -1.7], [5.0, 1.7], [-1.7, 5.0], [1.7, -5.0],
+      [-6.6, 3.3], [6.6, -3.3], [3.3, 6.6], [-3.3, -6.6]
+    ];
+    for (let i = 0; i < lampSpots.length; i++) {
+      const x = lampSpots[i][0], z = lampSpots[i][1];
+      const y = terrainH(x, z);
+      metal.cyl(x, y + 0.02, z, 0.032, 1.7, 6, PAL.steelDark);
+      metal.box(x + 0.16, y + 1.68, z, 0.32, 0.035, 0.05, PAL.steelDark, 0.3);
+      light.sphere(x + 0.3, y + 1.65, z, 0.065, PAL.warmHi, 8, 5);
+      lampPositions.push([x + 0.3, y + 1.65, z, 0.95]);
+    }
+
+    /* ---- 行驶车辆（道路上的移动光点） ---- */
+    for (let k = 0; k < 16; k++) {
+      const lane = (k % 4) - 1.5; // 4 lanes
+      const isXAxis = k % 2 === 0;
+      const dir = k % 4 < 2 ? 1 : -1;
+      const offset = (k * 1.73) % 6.8 - 3.4;
+      const carY = groundY + 0.08;
+      // 车头灯（白色/暖色）
+      light.sphere(isXAxis ? offset : lane * 3.4, carY, isXAxis ? lane * 3.4 : offset,
+        0.045, dir > 0 ? PAL.windowCool : PAL.warmHi, 6, 4);
+    }
+
+    return {
+      batches: [
+        { name: "terrain", mesh: terrain, mat: { rough: 0.95, metal: 0.0, emissive: 0, alpha: 1 } },
+        { name: "rock", mesh: rock, mat: { rough: 0.92, metal: 0.02, emissive: 0, alpha: 1 } },
+        { name: "paint", mesh: paint, mat: { rough: 0.7, metal: 0.03, emissive: 0, alpha: 1 } },
+        { name: "metal", mesh: metal, mat: { rough: 0.42, metal: 0.62, emissive: 0, alpha: 1 } },
+        { name: "foliage", mesh: foliage, mat: { rough: 0.9, metal: 0.0, emissive: 0, alpha: 1 } },
+        { name: "water", mesh: water, mat: { rough: 0.06, metal: 0.35, emissive: 0, alpha: 1 } },
+        { name: "detail", mesh: detail, mat: { rough: 0.85, metal: 0.05, emissive: 0, alpha: 1 } },
+        { name: "light", mesh: light, mat: { rough: 0.35, metal: 0.0, emissive: 2.7, alpha: 1 } },
+        { name: "glass", mesh: glass, mat: { rough: 0.08, metal: 0.18, emissive: 0.12, alpha: 0.24, blend: true } }
+      ],
+      lampPositions,
+      anchors: {
+        rain: [5.2, 0.4, 3.2],
+        cloud: [0, 10.5, 0],
+        uv: [0, 8.0, 0],
+        light: [0, 11.5, 0]
+      }
+    };
+  }
+
+  function terrainColor(x, z) {
+    // 城市地面：混凝土 + 道路网格
+    let c = cmix(PAL.concreteA, PAL.concreteB, fbm(x * 0.5 + 3, z * 0.5 - 2, 3));
+    c = cmix(c, PAL.sidewalk, 0.25);
+    // 道路网
+    const gx = Math.abs(((x + 16) % 3.4) - 1.7);
+    const gz = Math.abs(((z + 16) % 3.4) - 1.7);
+    const road = smoothstep(0.30, 0.05, Math.min(gx, gz));
+    c = cmix(c, PAL.asphalt, road * 0.9);
+    return c;
+  }
+
+  function addTree(trunk, needles, x, z, s, seed) {
+    const y = terrainH(x, z);
+    trunk.cyl(x, y + 0.02, z, 0.075 * s, 0.72 * s, 6, PAL.trunk);
+    const cA = cmix(PAL.treeA, PAL.treeB, hash2(seed, 2));
+    const cB = cmix(cA, PAL.treeC, 0.35 + hash2(seed, 4) * 0.35);
+    needles.cone(x, y + 0.48 * s, z, 0.62 * s, 0.9 * s, 9, cA);
+    needles.cone(x, y + 0.98 * s, z, 0.47 * s, 0.8 * s, 9, cmix(cA, PAL.treeB, 0.4));
+    needles.cone(x, y + 1.43 * s, z, 0.32 * s, 0.68 * s, 8, cmix(cB, PAL.treeB, 0.25));
+    if (s > 1.0) {
+      needles.cone(x + 0.28 * s, y + 0.82 * s, z - 0.18 * s, 0.32 * s, 0.55 * s, 7, cB);
+    }
+  }
+
+  function addFloatRock(rockB, terrainB, x, y, z, s, seed) {
+    const n = fbm(x * 0.7 + 4, z * 0.7 - 2, 3);
+    const col = cmix(PAL.rockA, PAL.rockC, 0.3 + n * 0.5);
+    rockB.hemiSphere(x, y, z, s, 9, 5, col, true);
+    rockB.cone(x, y - 0.1, z, s * 0.9, -s * 2.1, 8, cmul(col, 0.86));
+    for (let k = 0; k < 4; k++) {
+      const a = seed * 9 + k * 1.8;
+      const rr = s * (0.8 + hash2(k, seed) * 0.7);
+      const px = x + Math.cos(a) * rr, pz = z + Math.sin(a) * rr;
+      terrainB.cone(px, y - s * 0.7, pz, 0.09 * s, 0.5 * s, 5, PAL.treeC);
+    }
+  }
+
+  /* ----------------------------- class ------------------------------ */
+  class WeatherScene {
+    constructor(canvas, place) {
+      this.canvas = canvas;
+      this.gl = null;
+      this.place = place ? { ...place } : { name: "上海", latitude: 31.2304, longitude: 121.4737, timezone: "Asia/Shanghai" };
+      this.env = null;
+      this.autoOrbit = true;
+      this.view = 0;
+      this.userHold = 0;
+      this.dragging = false;
+      this.pointers = new Map();
+      this.dragLast = null;
+      this.pinchDist = 0;
+      this.start = performance.now();
+      this.cssW = window.innerWidth;
+      this.cssH = window.innerHeight;
+      this.width = 0;
+      this.height = 0;
+      this.dpr = 1;
+      this.lastVP = m4();
+      this.lastView = m4();
+      this.lastProj = m4();
+      this.fx = { rain: 0, cloud: 0, uv: 0, light: 0, wet: 0, snow: 0 };
+      this.fxTarget = { rain: 0, cloud: 0, uv: 0, light: 0, wet: 0, snow: 0 };
+      this.world = buildWorld();
+      this.batches = [];
+      this.lampPositions = this.world.lampPositions;
+      this.anchors = this.world.anchors;
+      this.cam = { az: 0.72, el: 0.26, dist: 22.0, tx: 0, ty: 4.5, tz: 0 };
+      this.camGoal = { az: 0.72, el: 0.26, dist: 22.0, tx: 0, ty: 4.5, tz: 0 };
+      this.sun = { dir: [0, -1, 0], alt: -1, moon: [0, 1, 0], day: 0, twilight: 0 };
+      this.quality = { bloomScale: 0.5, rainMax: 2600 };
+      this._initRenderer();
+    }
+
+    setPlace(p) {
+      if (!p) return;
+      this.place = { ...this.place, ...p };
+    }
+
+    setEnvironment(e) {
+      this.env = e ? { ...e } : null;
+      const rain = clamp((e?.rainRate || 0) / 9, 0, 1);
+      const cloud = clamp((e?.cloud || 0) / 100, 0, 1);
+      const uv = clamp((e?.uv || 0) / 11, 0, 1);
+      const light = clamp((e?.shortwave || 0) / 1000, 0, 1);
+      const snow = e?.snow ? 1 : 0;
+      const wet = rain > 0.015 ? clamp(0.35 + rain * 0.8, 0, 1) : (e?.rainTotal24 > 0.1 ? 0.25 : 0);
+      this.fxTarget = { rain, cloud, uv, light, wet, snow };
+    }
+
+    projectPoint(p) {
+      const m = this.lastVP;
+      const x = p[0], y = p[1], z = p[2];
+      const cx = m[0] * x + m[4] * y + m[8] * z + m[12];
+      const cy = m[1] * x + m[5] * y + m[9] * z + m[13];
+      const cz = m[2] * x + m[6] * y + m[10] * z + m[14];
+      const cw = m[3] * x + m[7] * y + m[11] * z + m[15];
+      if (cw <= 0.02) return { x: -999, y: -999, visible: false };
+      const nx = cx / cw, ny = cy / cw, nz = cz / cw;
+      return {
+        x: (nx * 0.5 + 0.5) * this.cssW,
+        y: (-ny * 0.5 + 0.5) * this.cssH,
+        visible: nz > -1 && nz < 1
+      };
+    }
+  }
+
+  window.WeatherScene = WeatherScene;
+  window.WeatherTerrain = { H: terrainH, N: terrainN, R: CITY_R };
+})();
+
+</script>
+<script>
+"use strict";
+/* =========================================================================
+   ATMOS° — WebGL2 renderer, part 1: shaders, buffers, targets, camera.
+   Loaded after weather-scene.js. All methods attach to WeatherScene.prototype.
+   ========================================================================= */
+(() => {
+  const WS = window.WeatherScene;
+  if (!WS) return;
+  const terrainH = (x, z) => (window.WeatherTerrain ? window.WeatherTerrain.H(x, z) : 0);
+  const DBG = new URLSearchParams(location.search);
+
+  const D2R = Math.PI / 180;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const mix = (a, b, t) => a + (b - a) * t;
+  const smoothstep = (a, b, x) => {
+    const t = clamp((x - a) / (b - a || 1e-6), 0, 1);
+    return t * t * (3 - 2 * t);
+  };
+  const norm3 = v => {
+    const l = Math.hypot(v[0], v[1], v[2]) || 1;
+    return [v[0] / l, v[1] / l, v[2] / l];
+  };
+  const add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const mul3 = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+  const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+
+  /* --------------------------- matrix helpers ----------------------- */
+  function mat4() {
+    return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+  }
+  function m4mul(out, a, b) {
+    for (let c = 0; c < 4; c++) {
+      for (let r = 0; r < 4; r++) {
+        out[c * 4 + r] =
+          a[r] * b[c * 4] +
+          a[4 + r] * b[c * 4 + 1] +
+          a[8 + r] * b[c * 4 + 2] +
+          a[12 + r] * b[c * 4 + 3];
+      }
+    }
+    return out;
+  }
+  function persp(out, fovy, aspect, near, far) {
+    const f = 1 / Math.tan(fovy / 2);
+    out.fill(0);
+    out[0] = f / aspect; out[5] = f;
+    out[10] = (far + near) / (near - far); out[11] = -1;
+    out[14] = 2 * far * near / (near - far);
+    return out;
+  }
+  function ortho(out, l, r, b, t, n, f) {
+    out.fill(0);
+    out[0] = 2 / (r - l); out[5] = 2 / (t - b); out[10] = -2 / (f - n);
+    out[12] = -(r + l) / (r - l); out[13] = -(t + b) / (t - b); out[14] = -(f + n) / (f - n);
+    out[15] = 1; return out;
+  }
+  function look(out, eye, center, up) {
+    const z = norm3(sub3(eye, center));
+    const x = norm3(cross3(up, z));
+    const y = cross3(z, x);
+    out[0] = x[0]; out[1] = y[0]; out[2] = z[0]; out[3] = 0;
+    out[4] = x[1]; out[5] = y[1]; out[6] = z[1]; out[7] = 0;
+    out[8] = x[2]; out[9] = y[2]; out[10] = z[2]; out[11] = 0;
+    out[12] = -dot3(x, eye); out[13] = -dot3(y, eye); out[14] = -dot3(z, eye); out[15] = 1;
+    return out;
+  }
+
+  /* ----------------------------- shaders ---------------------------- */
+  const QUAD_VS = `#version 300 es
+precision highp float;
+layout(location=0) in vec2 aPos;
+out vec2 vUv;
+void main(){
+  vUv = aPos * 0.5 + 0.5;
+  gl_Position = vec4(aPos, 0.0, 1.0);
+}`;
+
+  const SCENE_VS = `#version 300 es
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNormal;
+layout(location=2) in vec3 aColor;
+uniform mat4 uVP;
+uniform float uTime;
+uniform float uWater;
+out vec3 vWorld;
+out vec3 vN;
+out vec3 vC;
+void main(){
+  vec3 p = aPos;
+  if (uWater > 0.5) {
+    p.y += sin(p.x * 2.7 + uTime * 1.4) * 0.006 + sin(p.z * 3.1 - uTime * 1.1) * 0.004;
+  }
+  vWorld = p;
+  vN = normalize(aNormal);
+  vC = aColor;
+  gl_Position = uVP * vec4(p, 1.0);
+}`;
+
+  const SCENE_FS = `#version 300 es
+precision highp float;
+precision highp sampler2DShadow;
+in vec3 vWorld;
+in vec3 vN;
+in vec3 vC;
+uniform vec3 uCamPos;
+uniform vec3 uSunDir;
+uniform vec3 uSunColor;
+uniform vec3 uSkyAmb;
+uniform vec3 uGroundAmb;
+uniform vec3 uFogColor;
+uniform vec3 uMoonColor;
+uniform float uFogDen;
+uniform float uWet;
+uniform float uSnow;
+uniform float uWater;
+uniform float uTime;
+uniform float uEmissive;
+uniform float uRough;
+uniform float uMetal;
+uniform float uAlpha;
+uniform int uLampCount;
+uniform vec3 uLampPos[4];
+uniform vec3 uLampColor[4];
+uniform float uLampPower[4];
+uniform sampler2DShadow uShadow;
+uniform mat4 uLightVP;
+uniform float uShadowOn;
+out vec4 outColor;
+
+float shadowAt(vec3 p) {
+  vec4 lp = uLightVP * vec4(p, 1.0);
+  vec3 proj = lp.xyz / max(lp.w, 0.0001);
+  proj = proj * 0.5 + 0.5;
+  if (proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0 || proj.z > 1.0 || proj.z < 0.0) return 1.0;
+  float bias = max(0.0022 * (1.0 - dot(normalize(vN), uSunDir)), 0.0007);
+  vec2 texel = vec2(1.0 / 1024.0);
+  float s = 0.0;
+  for (int x = -1; x <= 1; x++) {
+    for (int y = -1; y <= 1; y++) {
+      s += texture(uShadow, vec3(proj.xy + vec2(float(x), float(y)) * texel * 1.1, proj.z - bias));
+    }
+  }
+  return s / 9.0;
+}
+
+void main() {
+  vec3 N = normalize(vN);
+  vec3 V = normalize(uCamPos - vWorld);
+  if (uWater > 0.5) {
+    float w1 = sin(vWorld.x * 2.4 + uTime * 1.2) * 0.5 + sin(vWorld.z * 3.3 - uTime * 0.8) * 0.5;
+    float w2 = cos(vWorld.x * 4.1 - uTime * 0.7) * 0.5 + cos(vWorld.z * 2.2 + uTime * 1.1) * 0.5;
+    N = normalize(vec3(w1 * 0.045, 1.0, w2 * 0.035));
+  }
+
+  float ndl = max(dot(N, uSunDir), 0.0);
+  float sh = uShadowOn > 0.5 ? shadowAt(vWorld + N * 0.035) : 1.0;
+  vec3 light = uSunColor * ndl * sh;
+  vec3 amb = mix(uGroundAmb, uSkyAmb, clamp(N.y * 0.5 + 0.5, 0.0, 1.0));
+  vec3 col = vC * (amb + light);
+  col += vC * uMoonColor * max(N.y, 0.0) * 0.3;
+
+  float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+  col += uSkyAmb * fres * 0.055;
+  vec3 rimTint = mix(vec3(0.13, 0.18, 0.28), uSkyAmb * 2.2, 0.45);
+  col += rimTint * fres * 0.075;
+
+  for (int i = 0; i < 4; i++) {
+    if (i >= uLampCount) break;
+    vec3 d = uLampPos[i] - vWorld;
+    float dd = dot(d, d);
+    float att = 1.0 / (1.0 + dd * 1.35);
+    float nl = max(dot(N, normalize(d)), 0.0);
+    col += vC * uLampColor[i] * uLampPower[i] * att * (0.16 + 0.84 * nl);
+  }
+
+  float wetMask = uWet * (1.0 - smoothstep(0.15, 0.95, N.y));
+  col *= 1.0 - wetMask * 0.26;
+
+  vec3 H = normalize(V + uSunDir);
+  float specPow = mix(90.0, 24.0, clamp(uRough, 0.0, 1.0));
+  float gloss = mix(0.05, 0.7, uWet);
+  vec3 specTint = mix(vec3(1.0), vC * 1.5, clamp(uMetal, 0.0, 1.0));
+  float spec = pow(max(dot(N, H), 0.0), specPow);
+  col += uSunColor * spec * gloss * specTint * 0.62 * sh;
+
+  if (uWater > 0.5) {
+    float glint = pow(max(dot(reflect(-uSunDir, N), V), 0.0), 90.0);
+    col += uSunColor * glint * 0.9 * sh;
+    col += uSkyAmb * 0.07;
+  }
+
+  col += vC * uEmissive;
+
+  if (uSnow > 0.001) {
+    vec3 snowLit = vec3(0.52, 0.57, 0.60) * (amb * 2.4 + light * 0.9);
+    col = mix(col, snowLit, uSnow * max(N.y, 0.0) * 0.58);
+  }
+
+  float dist = length(uCamPos - vWorld);
+  float fog = 1.0 - exp(-uFogDen * dist);
+  col = mix(col, uFogColor, clamp(fog, 0.0, 0.92));
+  outColor = vec4(col, uAlpha);
+}`;
+
+  const SHADOW_VS = `#version 300 es
+precision highp float;
+layout(location=0) in vec3 aPos;
+uniform mat4 uLightVP;
+void main(){ gl_Position = uLightVP * vec4(aPos, 1.0); }`;
+  const SHADOW_FS = `#version 300 es
+precision highp float;
+out vec4 o;
+void main(){ o = vec4(1.0); }`;
+
+  const SKY_FS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+uniform vec3 uCamPos;
+uniform vec3 uCamFwd;
+uniform vec3 uCamRight;
+uniform vec3 uCamUp;
+uniform float uAspect;
+uniform float uTanHalf;
+uniform float uTime;
+uniform float uDay;
+uniform float uTwilight;
+uniform vec3 uSunDir;
+uniform vec3 uMoonDir;
+uniform vec3 uSunColor;
+uniform vec3 uZenithDay;
+uniform vec3 uHorizonDay;
+uniform vec3 uZenithNight;
+uniform vec3 uHorizonNight;
+uniform vec3 uFogColor;
+uniform float uUV;
+uniform float uOvercast;
+out vec4 outColor;
+
+float hash21(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+float hash31(vec3 p) {
+  p = fract(p * 0.1031);
+  p += dot(p, p.yzx + 33.33);
+  return fract((p.x + p.y) * p.z);
+}
+float noise2(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash21(i), b = hash21(i + vec2(1, 0));
+  float c = hash21(i + vec2(0, 1)), d = hash21(i + vec2(1, 1));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+float fbm2(vec2 p) {
+  float v = 0.0, a = 0.5;
+  for (int i = 0; i < 5; i++) { v += noise2(p) * a; p = p * 2.03 + 17.1; a *= 0.5; }
+  return v;
+}
+
+void main() {
+  vec2 ndc = vUv * 2.0 - 1.0;
+  vec3 dir = normalize(uCamFwd + uCamRight * ndc.x * uAspect * uTanHalf + uCamUp * ndc.y * uTanHalf);
+  float y = dir.y;
+  vec3 zen = mix(uZenithNight, uZenithDay, uDay);
+  vec3 hor = mix(uHorizonNight, uHorizonDay, uDay);
+  float band = pow(1.0 - clamp(y, 0.0, 1.0), 3.0);
+  vec3 col = mix(zen, hor, band);
+  vec3 below = mix(vec3(0.003, 0.005, 0.010), vec3(0.06, 0.08, 0.09), uDay);
+  col = mix(col, below, smoothstep(0.02, -0.20, y));
+
+  float sunAmt = max(dot(dir, uSunDir), 0.0);
+  col += vec3(1.0, 0.32, 0.08) * uTwilight * pow(1.0 - max(y, 0.0), 4.0) * 0.22;
+  col += uSunColor * pow(sunAmt, 24.0) * 0.16 * smoothstep(-0.08, 0.06, uSunDir.y);
+
+  float sd = dot(dir, uSunDir);
+  float sunDisk = smoothstep(0.99985, 0.99995, sd);
+  float sunGlow = pow(max(sd, 0.0), 1800.0) * 2.4 + pow(max(sd, 0.0), 70.0) * 0.12;
+  col += uSunColor * (sunDisk * 1.9 + sunGlow) * smoothstep(-0.025, 0.02, uSunDir.y);
+
+  float halo = pow(max(sd, 0.0), 9.0);
+  col += vec3(0.30, 0.07, 0.55) * halo * uUV * 1.25;
+  float uvHaze = exp(-pow((y - 0.12) / 0.22, 2.0));
+  col += vec3(0.16, 0.04, 0.28) * uUV * uvHaze * 0.34;
+
+  float md = dot(dir, uMoonDir);
+  float moonDisk = smoothstep(0.99958, 0.99984, md);
+  float moonGlow = pow(max(md, 0.0), 220.0) * 0.18 + pow(max(md, 0.0), 18.0) * 0.012;
+  col += vec3(0.55, 0.68, 0.90) * (moonDisk * 1.55 + moonGlow) * (1.0 - uDay) * (1.0 - 0.55 * uOvercast);
+
+  vec3 sp = dir * 170.0;
+  vec3 id = floor(sp);
+  vec3 f = fract(sp) - 0.5;
+  float h = hash31(id);
+  float star = step(0.9962, h);
+  float tw = 0.55 + 0.45 * sin(uTime * 1.7 + h * 30.0);
+  star *= smoothstep(0.34, 0.0, length(f));
+  col += vec3(0.68, 0.78, 1.0) * star * tw * (1.0 - uDay) * 1.15 * (1.0 - 0.92 * uOvercast);
+
+  vec3 overcastCol = mix(vec3(0.018, 0.025, 0.038), vec3(0.29, 0.34, 0.40), uDay);
+  col = mix(col, overcastCol, uOvercast * 0.58);
+
+  float n = fbm2(dir.xz * 3.4 + vec2(uTime * 0.004, 0.0));
+  col += vec3(0.08, 0.09, 0.11) * smoothstep(0.58, 0.88, n) * (0.12 + 0.28 * uDay) * smoothstep(0.02, 0.3, y);
+
+  col = mix(col, uFogColor, smoothstep(0.18, 0.0, abs(y)) * 0.24);
+  outColor = vec4(max(col, 0.0), 1.0);
+}`;
+
+  const CLOUD_VS = `#version 300 es
+precision highp float;
+layout(location=0) in vec2 aCorner;
+layout(location=1) in vec3 aBase;
+layout(location=2) in vec4 aParams;
+layout(location=3) in float aLayer;
+layout(location=4) in vec2 aData;
+uniform mat4 uVP;
+uniform vec3 uCamRight;
+uniform vec3 uCamUp;
+uniform float uLow;
+uniform float uMid;
+uniform float uHigh;
+uniform float uSea;
+uniform float uTime;
+out vec2 vUv;
+out vec3 vWorld;
+out float vAlpha;
+out float vSeed;
+out float vLayer;
+void main(){
+  float cov = aLayer < 0.5 ? uLow : (aLayer < 1.5 ? uMid : (aLayer < 2.5 ? uHigh : uSea));
+  float vis = smoothstep(aData.x - 0.14, aData.x + 0.14, cov);
+  vAlpha = vis * aParams.w * mix(0.7, 1.0, cov);
+  vec3 center = aBase + vec3(sin(uTime * 0.03 + aParams.z * 8.0) * 0.28, 0.0, cos(uTime * 0.025 + aParams.z * 7.0) * 0.22);
+  float rot = aData.y;
+  vec2 q = vec2(aCorner.x * cos(rot) - aCorner.y * sin(rot), aCorner.x * sin(rot) + aCorner.y * cos(rot));
+  vec3 p = center + uCamRight * q.x * aParams.x + uCamUp * q.y * aParams.y;
+  vUv = aCorner * 2.0;
+  vWorld = p;
+  vSeed = aParams.z;
+  vLayer = aLayer;
+  gl_Position = uVP * vec4(p, 1.0);
+}`;
+
+  const CLOUD_FS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+in vec3 vWorld;
+in float vAlpha;
+in float vSeed;
+in float vLayer;
+uniform float uTime;
+uniform vec3 uCloudLit;
+uniform vec3 uCloudShade;
+uniform vec3 uSunColor;
+uniform float uDay;
+out vec4 outColor;
+
+float hash21(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+float noise2(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash21(i), b = hash21(i + vec2(1, 0));
+  float c = hash21(i + vec2(0, 1)), d = hash21(i + vec2(1, 1));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+float fbm2(vec2 p) {
+  float v = 0.0, a = 0.5;
+  for (int i = 0; i < 5; i++) { v += noise2(p) * a; p = p * 2.04 + 9.2; a *= 0.5; }
+  return v;
+}
+void main(){
+  float r = length(vUv);
+  float n = fbm2(vUv * 2.35 + vec2(vSeed * 7.3, vSeed * 3.1) + vec2(uTime * 0.008, 0.0));
+  float n2 = fbm2(vUv * 5.5 - vec2(vSeed * 2.0, 0.0) - vec2(uTime * 0.006, 0.0));
+  float mask = smoothstep(1.02, 0.15, r + (n - 0.5) * 0.82);
+  float alpha = mask * (0.45 + 0.65 * n2) * vAlpha;
+  if (alpha < 0.008) discard;
+  float top = clamp(vUv.y * 0.5 + 0.5, 0.0, 1.0);
+  vec3 col = mix(uCloudShade, uCloudLit, 0.18 + 0.82 * top);
+  col += uSunColor * pow(max(0.0, 1.0 - r), 3.0) * 0.038 * (0.12 + 0.88 * uDay);
+  col += vec3(0.012, 0.018, 0.030) * pow(top, 1.6);
+  outColor = vec4(col, alpha);
+}`;
+
+  const RAIN_VS = `#version 300 es
+precision highp float;
+layout(location=0) in vec4 aSeed;
+layout(location=1) in float aSpeed;
+uniform mat4 uVP;
+uniform float uTime;
+uniform float uRain;
+uniform float uWind;
+uniform vec3 uCamPos;
+uniform float uScale;
+out float vAlpha;
+void main(){
+  float fall = fract(aSeed.w + uTime * aSpeed * (0.55 + uRain * 0.95));
+  float y = aSeed.z - fall * 12.0;
+  float x = aSeed.x + uWind * fall * 1.8;
+  vec3 p = vec3(x, y, aSeed.y);
+  vec4 clip = uVP * vec4(p, 1.0);
+  float dist = length(uCamPos - p);
+  float edge = min(smoothstep(0.0, 0.06, fall), smoothstep(1.0, 0.88, fall));
+  vAlpha = uRain * edge * (1.0 - smoothstep(22.0, 48.0, dist));
+  gl_PointSize = clamp(120.0 / (dist + 2.5) * uScale, 2.0, 16.0);
+  gl_Position = clip;
+}`;
+
+  const RAIN_FS = `#version 300 es
+precision highp float;
+in float vAlpha;
+out vec4 outColor;
+void main(){
+  vec2 q = gl_PointCoord - 0.5;
+  float a = exp(-pow(abs(q.x) / 0.055, 2.0));
+  a *= smoothstep(0.5, 0.10, abs(q.y));
+  if (a < 0.012) discard;
+  outColor = vec4(vec3(0.55, 0.68, 0.82), a * vAlpha * 0.72);
+}`;
+
+  const RIPPLE_VS = `#version 300 es
+precision highp float;
+layout(location=0) in vec2 aCorner;
+layout(location=1) in vec3 aCenter;
+layout(location=2) in vec2 aData;
+uniform mat4 uVP;
+uniform float uTime;
+uniform float uRain;
+out vec2 vUv;
+out float vA;
+void main(){
+  float age = fract(aData.x + uTime * 0.16);
+  float rad = 0.035 + age * (0.12 + aData.y * 0.22);
+  vec3 p = vec3(aCenter.x + aCorner.x * rad, aCenter.y + 0.012, aCenter.z + aCorner.y * rad);
+  vUv = aCorner;
+  vA = sin(age * 3.14159265) * (1.0 - age) * uRain;
+  gl_Position = uVP * vec4(p, 1.0);
+}`;
+
+  const RIPPLE_FS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+in float vA;
+out vec4 outColor;
+void main(){
+  float r = length(vUv);
+  float ring = smoothstep(0.98, 0.74, r) * smoothstep(0.42, 0.63, r);
+  if (ring < 0.015) discard;
+  outColor = vec4(vec3(0.45, 0.62, 0.72), ring * vA * 0.22);
+}`;
+
+  const BRIGHT_FS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+uniform sampler2D uTex;
+uniform float uThreshold;
+out vec4 outColor;
+void main(){
+  vec3 c = texture(uTex, vUv).rgb;
+  float l = max(c.r, max(c.g, c.b));
+  float k = max(l - uThreshold, 0.0);
+  k = k * k / max(4.0 * l, 0.0001);
+  outColor = vec4(c * k, 1.0);
+}`;
+
+  const BLUR_FS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+uniform sampler2D uTex;
+uniform vec2 uTexel;
+uniform vec2 uDir;
+out vec4 outColor;
+void main(){
+  vec2 o = uDir * uTexel;
+  vec3 c = texture(uTex, vUv).rgb * 0.227027;
+  c += texture(uTex, vUv + o * 1.384615).rgb * 0.316216;
+  c += texture(uTex, vUv - o * 1.384615).rgb * 0.316216;
+  c += texture(uTex, vUv + o * 3.230769).rgb * 0.070270;
+  c += texture(uTex, vUv - o * 3.230769).rgb * 0.070270;
+  outColor = vec4(c, 1.0);
+}`;
+
+  const COMP_FS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+uniform sampler2D uScene;
+uniform sampler2D uBloom;
+uniform float uBloomAmt;
+uniform float uExposure;
+uniform float uVignette;
+uniform float uGrain;
+uniform float uTime;
+out vec4 outColor;
+vec3 aces(vec3 x) {
+  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+}
+float hash21(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+void main(){
+  vec3 c = texture(uScene, vUv).rgb;
+  vec3 b = texture(uBloom, vUv).rgb;
+  c += b * uBloomAmt;
+  c *= uExposure;
+  c = aces(c);
+  c = pow(c, vec3(1.0 / 2.2));
+  float lum = dot(c, vec3(0.299, 0.587, 0.114));
+  c = mix(vec3(lum), c, 1.18);
+  c = clamp((c - 0.5) * 1.06 + 0.5, 0.0, 1.0);
+  float vig = smoothstep(1.30, 0.42, length((vUv - 0.5) * vec2(1.0, 1.12)));
+  c *= mix(1.0, vig, uVignette);
+  float g = hash21(vUv * 913.0 + fract(uTime) * 37.0) - 0.5;
+  c += g * uGrain;
+  outColor = vec4(c, 1.0);
+}`;
+
+  /* ------------------------- GL small helpers ----------------------- */
+  function compile(gl, type, src) {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(sh);
+      const numbered = src.split("\n").map((l, i) => String(i + 1).padStart(3) + " " + l).join("\n");
+      gl.deleteShader(sh);
+      throw new Error("Shader compile failed: " + log + "\n\n" + numbered);
+    }
+    return sh;
+  }
+  function program(gl, vs, fs) {
+    const p = gl.createProgram();
+    const v = compile(gl, gl.VERTEX_SHADER, vs);
+    const f = compile(gl, gl.FRAGMENT_SHADER, fs);
+    gl.attachShader(p, v);
+    gl.attachShader(p, f);
+    gl.linkProgram(p);
+    gl.deleteShader(v); gl.deleteShader(f);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+      const log = gl.getProgramInfoLog(p);
+      gl.deleteProgram(p);
+      throw new Error("Program link failed: " + log);
+    }
+    return p;
+  }
+  function uniformMap(gl, p, names) {
+    const o = {};
+    for (const n of names) o[n] = gl.getUniformLocation(p, n);
+    return o;
+  }
+  function makeBuf(gl, data, usage = gl.STATIC_DRAW) {
+    const b = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    gl.bufferData(gl.ARRAY_BUFFER, data, usage);
+    return b;
+  }
+  function rng(seed) {
+    let s = seed >>> 0;
+    return () => {
+      s += 0x6D2B79F5;
+      let t = s;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  /* --------------------------- initialization ----------------------- */
+  WS.prototype._initRenderer = function () {
+    const gl = this.canvas.getContext("webgl2", {
+      antialias: true,
+      alpha: false,
+      depth: true,
+      stencil: false,
+      powerPreference: "high-performance",
+      preserveDrawingBuffer: true
+    });
+    if (!gl) throw new Error("无法创建 WebGL2 上下文");
+    this.gl = gl;
+    this.lightVP = mat4();
+    this.lastVP = this.lastVP || mat4();
+    this.hdr = !!gl.getExtension("EXT_color_buffer_float");
+    gl.getExtension("OES_texture_float_linear");
+
+    this.P = {
+      scene: program(gl, SCENE_VS, SCENE_FS),
+      shadow: program(gl, SHADOW_VS, SHADOW_FS),
+      sky: program(gl, QUAD_VS, SKY_FS),
+      cloud: program(gl, CLOUD_VS, CLOUD_FS),
+      rain: program(gl, RAIN_VS, RAIN_FS),
+      ripple: program(gl, RIPPLE_VS, RIPPLE_FS),
+      bright: program(gl, QUAD_VS, BRIGHT_FS),
+      blur: program(gl, QUAD_VS, BLUR_FS),
+      comp: program(gl, QUAD_VS, COMP_FS)
+    };
+    this.U = {
+      scene: uniformMap(gl, this.P.scene, [
+        "uVP", "uTime", "uWater", "uCamPos", "uSunDir", "uSunColor", "uSkyAmb", "uGroundAmb",
+        "uFogColor", "uMoonColor", "uFogDen", "uWet", "uSnow", "uEmissive", "uRough", "uMetal", "uAlpha",
+        "uLampCount", "uLampPos[0]", "uLampColor[0]", "uLampPower[0]", "uShadow", "uLightVP", "uShadowOn"
+      ]),
+      shadow: uniformMap(gl, this.P.shadow, ["uLightVP"]),
+      sky: uniformMap(gl, this.P.sky, [
+        "uCamPos", "uCamFwd", "uCamRight", "uCamUp", "uAspect", "uTanHalf", "uTime", "uDay", "uTwilight",
+        "uSunDir", "uMoonDir", "uSunColor", "uZenithDay", "uHorizonDay", "uZenithNight", "uHorizonNight",
+        "uFogColor", "uUV", "uOvercast"
+      ]),
+      cloud: uniformMap(gl, this.P.cloud, ["uVP", "uCamRight", "uCamUp", "uLow", "uMid", "uHigh", "uSea", "uTime", "uCloudLit", "uCloudShade", "uSunColor", "uDay"]),
+      rain: uniformMap(gl, this.P.rain, ["uVP", "uTime", "uRain", "uWind", "uCamPos", "uScale"]),
+      ripple: uniformMap(gl, this.P.ripple, ["uVP", "uTime", "uRain"]),
+      bright: uniformMap(gl, this.P.bright, ["uTex", "uThreshold"]),
+      blur: uniformMap(gl, this.P.blur, ["uTex", "uTexel", "uDir"]),
+      comp: uniformMap(gl, this.P.comp, ["uScene", "uBloom", "uBloomAmt", "uExposure", "uVignette", "uGrain", "uTime"])
+    };
+
+    this._initQuad();
+    this._makeBatches();
+    this._makeClouds();
+    this._makeRain();
+    this._makeRipples();
+    this._makeShadowTarget();
+    this._initEvents();
+    this._resize();
+    this.ready = true;
+  };
+
+  WS.prototype._initQuad = function () {
+    const gl = this.gl;
+    this.fsVAO = gl.createVertexArray();
+    gl.bindVertexArray(this.fsVAO);
+    const b = makeBuf(gl, new Float32Array([-1, -1, 3, -1, -1, 3]));
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+    this.quadBuf = b;
+  };
+
+  WS.prototype._makeBatches = function () {
+    const gl = this.gl;
+    this.batches = [];
+    for (const b of this.world.batches) {
+      const m = b.mesh;
+      const count = m.p.length / 3;
+      if (!count) continue;
+      const data = new Float32Array(count * 9);
+      for (let i = 0; i < count; i++) {
+        data[i * 9] = m.p[i * 3];
+        data[i * 9 + 1] = m.p[i * 3 + 1];
+        data[i * 9 + 2] = m.p[i * 3 + 2];
+        data[i * 9 + 3] = m.n[i * 3];
+        data[i * 9 + 4] = m.n[i * 3 + 1];
+        data[i * 9 + 5] = m.n[i * 3 + 2];
+        data[i * 9 + 6] = m.c[i * 3];
+        data[i * 9 + 7] = m.c[i * 3 + 1];
+        data[i * 9 + 8] = m.c[i * 3 + 2];
+      }
+      const vao = gl.createVertexArray();
+      gl.bindVertexArray(vao);
+      const buf = makeBuf(gl, data);
+      const stride = 9 * 4;
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 3, gl.FLOAT, false, stride, 0);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribPointer(1, 3, gl.FLOAT, false, stride, 12);
+      gl.enableVertexAttribArray(2);
+      gl.vertexAttribPointer(2, 3, gl.FLOAT, false, stride, 24);
+      gl.bindVertexArray(null);
+      this.batches.push({ name: b.name, vao, buf, count, mat: b.mat });
+    }
+  };
+
+  WS.prototype._makeClouds = function () {
+    const gl = this.gl;
+    const R = rng(20261102);
+    const bases = [], params = [], layers = [], datas = [];
+    const addLayer = (layer, count, cfg) => {
+      for (let i = 0; i < count; i++) {
+        const a = R() * Math.PI * 2;
+        const rad = mix(cfg.rMin, cfg.rMax, Math.pow(R(), 0.72));
+        const y = mix(cfg.yMin, cfg.yMax, R());
+        const sx = mix(cfg.sMin, cfg.sMax, R());
+        const sy = sx * mix(cfg.aspectMin, cfg.aspectMax, R());
+        bases.push(Math.cos(a) * rad, y, Math.sin(a) * rad);
+        params.push(sx, sy, R(), mix(cfg.aMin, cfg.aMax, R()));
+        layers.push(layer);
+        datas.push(mix(cfg.thMin, cfg.thMax, R()), R() * Math.PI * 2);
+      }
+    };
+    addLayer(0, 22, { rMin: 6.0, rMax: 13.0, yMin: 5.5, yMax: 8.5, sMin: 2.2, sMax: 4.5, aspectMin: 0.50, aspectMax: 0.80, aMin: 0.48, aMax: 0.68, thMin: 0.04, thMax: 0.86 });
+    addLayer(1, 18, { rMin: 12.0, rMax: 22.0, yMin: 10.0, yMax: 14.0, sMin: 5.0, sMax: 9.0, aspectMin: 0.34, aspectMax: 0.58, aMin: 0.38, aMax: 0.58, thMin: 0.06, thMax: 0.88 });
+    addLayer(1, 22, { rMin: 22.0, rMax: 36.0, yMin: 15.0, yMax: 20.0, sMin: 8.0, sMax: 15.0, aspectMin: 0.40, aspectMax: 0.66, aMin: 0.34, aMax: 0.52, thMin: 0.04, thMax: 0.88 });
+    addLayer(1, 18, { rMin: 38.0, rMax: 62.0, yMin: 8.0, yMax: 14.0, sMin: 12.0, sMax: 24.0, aspectMin: 0.28, aspectMax: 0.46, aMin: 0.42, aMax: 0.64, thMin: 0.04, thMax: 0.85 });
+    addLayer(2, 24, { rMin: 26.0, rMax: 45.0, yMin: 22.0, yMax: 30.0, sMin: 14.0, sMax: 26.0, aspectMin: 0.22, aspectMax: 0.44, aMin: 0.18, aMax: 0.32, thMin: 0.04, thMax: 0.9 });
+    addLayer(3, 14, { rMin: 30.0, rMax: 55.0, yMin: -2.0, yMax: 3.0, sMin: 20.0, sMax: 36.0, aspectMin: 0.42, aspectMax: 0.65, aMin: 0.28, aMax: 0.44, thMin: 0, thMax: 0 });
+
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const corners = new Float32Array([
+      -0.5, -0.5, 0.5, -0.5, 0.5, 0.5,
+      -0.5, -0.5, 0.5, 0.5, -0.5, 0.5
+    ]);
+    makeBuf(gl, corners);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+    const addInst = (loc, data, size) => {
+      makeBuf(gl, new Float32Array(data));
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
+      gl.vertexAttribDivisor(loc, 1);
+    };
+    addInst(1, bases, 3);
+    addInst(2, params, 4);
+    addInst(3, layers, 1);
+    addInst(4, datas, 2);
+    gl.bindVertexArray(null);
+    this.cloud = { vao, count: layers.length, base: bases, params, layers, datas };
+  };
+
+  WS.prototype._makeRain = function () {
+    const gl = this.gl;
+    const R = rng(77031);
+    const N = 4200;
+    const seeds = new Float32Array(N * 4);
+    const speeds = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      const a = R() * Math.PI * 2;
+      const r = Math.sqrt(R()) * 11.0;
+      seeds[i * 4] = Math.cos(a) * r;
+      seeds[i * 4 + 1] = Math.sin(a) * r;
+      seeds[i * 4 + 2] = 11.0 + R() * 1.5;
+      seeds[i * 4 + 3] = R();
+      speeds[i] = 0.55 + R() * 0.9;
+    }
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const b1 = makeBuf(gl, seeds);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
+    const b2 = makeBuf(gl, speeds);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+    this.rain = { vao, count: N, seeds, speeds, b1, b2 };
+  };
+
+  WS.prototype._makeRipples = function () {
+    const gl = this.gl;
+    const R = rng(90311);
+    const centers = [], data = [];
+    const pondX = 4.18, pondZ = 2.55;
+    const pondY = terrainH(pondX, pondZ);
+    for (let i = 0; i < 46; i++) {
+      const a = R() * Math.PI * 2;
+      const r = 0.10 + Math.sqrt(R()) * 1.02;
+      centers.push(pondX + Math.cos(a) * r, pondY + 0.024, pondZ + Math.sin(a) * r);
+      data.push(R(), 0.22 + R() * 0.62);
+    }
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const corners = new Float32Array([
+      -1, -1, 1, -1, 1, 1,
+      -1, -1, 1, 1, -1, 1
+    ]);
+    makeBuf(gl, corners);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    makeBuf(gl, new Float32Array(centers));
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(1, 1);
+    makeBuf(gl, new Float32Array(data));
+    gl.enableVertexAttribArray(2);
+    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(2, 1);
+    gl.bindVertexArray(null);
+    this.ripples = { vao, count: data.length / 2 };
+  };
+
+  WS.prototype._makeShadowTarget = function () {
+    const gl = this.gl;
+    const size = 1024;
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, size, size, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, tex, 0);
+    gl.drawBuffers([gl.NONE]);
+    gl.readBuffer(gl.NONE);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (!ok) throw new Error("阴影渲染目标创建失败");
+    this.shadow = { fbo, tex, size };
+  };
+
+  WS.prototype._makeTargets = function () {
+    const gl = this.gl;
+    if (this.targets) this._destroyTargets();
+    const w = this.width, h = this.height;
+    const bw = Math.max(1, Math.floor(w / 2)), bh = Math.max(1, Math.floor(h / 2));
+    const internal = this.hdr ? gl.RGBA16F : gl.RGBA8;
+    const type = this.hdr ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE;
+    const makeTex = (ww, hh) => {
+      const t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texImage2D(gl.TEXTURE_2D, 0, internal, ww, hh, 0, gl.RGBA, type, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      return t;
+    };
+    const makeFBO = (tex) => {
+      const f = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      return f;
+    };
+    const sceneTex = makeTex(w, h);
+    const sceneFBO = makeFBO(sceneTex);
+    const depth = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, w, h);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error("场景帧缓冲创建失败");
+    const bloomA = makeTex(bw, bh);
+    const bloomB = makeTex(bw, bh);
+    const bloomFA = makeFBO(bloomA);
+    const bloomFB = makeFBO(bloomB);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+    this.targets = { w, h, bw, bh, sceneTex, sceneFBO, depth, bloomA, bloomB, bloomFA, bloomFB };
+  };
+
+  WS.prototype._destroyTargets = function () {
+    const gl = this.gl, t = this.targets;
+    if (!t) return;
+    gl.deleteTexture(t.sceneTex);
+    gl.deleteFramebuffer(t.sceneFBO);
+    gl.deleteRenderbuffer(t.depth);
+    gl.deleteTexture(t.bloomA);
+    gl.deleteTexture(t.bloomB);
+    gl.deleteFramebuffer(t.bloomFA);
+    gl.deleteFramebuffer(t.bloomFB);
+    this.targets = null;
+  };
+
+  WS.prototype._resize = function () {
+    const canvas = this.canvas;
+    const cw = Math.max(1, canvas.clientWidth || window.innerWidth);
+    const ch = Math.max(1, canvas.clientHeight || window.innerHeight);
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+    this.cssW = cw;
+    this.cssH = ch;
+    const w = Math.max(1, Math.floor(cw * dpr));
+    const h = Math.max(1, Math.floor(ch * dpr));
+    if (w === this.width && h === this.height && this.targets) return;
+    this.width = w;
+    this.height = h;
+    canvas.width = w;
+    canvas.height = h;
+    if (this.gl) {
+      this.gl.viewport(0, 0, w, h);
+      this._makeTargets();
+    }
+  };
+
+  /* ----------------------------- camera ----------------------------- */
+  WS.prototype.setView = function (n) {
+    this.view = clamp(n | 0, 0, 2);
+    const presets = [
+      { az: 0.72, el: 0.26, dist: 22.0, tx: 0, ty: 4.5, tz: 0 },
+      { az: 0.48, el: 0.10, dist: 18.0, tx: 0, ty: 9.0, tz: 0 },
+      { az: 0.94, el: 0.05, dist: 13.0, tx: 0, ty: 1.6, tz: 0 }
+    ];
+    const p = presets[this.view];
+    this.camGoal = { ...p };
+    this.userHold = Math.max(this.userHold, 6.0);
+  };
+
+  WS.prototype.setAutoOrbit = function (on) {
+    this.autoOrbit = !!on;
+  };
+
+  WS.prototype._initEvents = function () {
+    const c = this.canvas;
+    c.style.touchAction = "none";
+    c.addEventListener("pointerdown", e => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      try { c.setPointerCapture(e.pointerId); } catch (_) {}
+      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      this.userHold = 4.0;
+      if (this.pointers.size === 1) {
+        this.dragging = true;
+        this.dragLast = { x: e.clientX, y: e.clientY };
+      } else if (this.pointers.size === 2) {
+        this.dragging = false;
+        const pts = [...this.pointers.values()];
+        this.pinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      }
+    });
+    c.addEventListener("pointermove", e => {
+      if (!this.pointers.has(e.pointerId)) return;
+      const prev = this.pointers.get(e.pointerId);
+      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.pointers.size === 2) {
+        const pts = [...this.pointers.values()];
+        const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        if (this.pinchDist > 0) {
+          this.camGoal.dist = clamp(this.camGoal.dist * (this.pinchDist / Math.max(d, 1)), 9.0, 34.0);
+        }
+        this.pinchDist = d;
+        return;
+      }
+      if (!this.dragging || !this.dragLast) return;
+      const dx = e.clientX - this.dragLast.x;
+      const dy = e.clientY - this.dragLast.y;
+      this.dragLast = { x: e.clientX, y: e.clientY };
+      this.camGoal.az -= dx * 0.0042;
+      this.camGoal.el = clamp(this.camGoal.el + dy * 0.0034, 0.035, 1.18);
+    });
+    const end = e => {
+      this.pointers.delete(e.pointerId);
+      this.pinchDist = 0;
+      if (this.pointers.size === 0) this.dragging = false;
+      if (this.pointers.size === 1) {
+        const p = [...this.pointers.values()][0];
+        this.dragging = true;
+        this.dragLast = { x: p.x, y: p.y };
+      }
+    };
+    c.addEventListener("pointerup", end);
+    c.addEventListener("pointercancel", end);
+    c.addEventListener("wheel", e => {
+      e.preventDefault();
+      this.camGoal.dist = clamp(this.camGoal.dist * Math.exp(e.deltaY * 0.0011), 9.0, 34.0);
+      this.userHold = 3.5;
+    }, { passive: false });
+    window.addEventListener("resize", () => {
+      this._resize();
+    });
+  };
+
+  WS.prototype._updateCamera = function (dt, now) {
+    if (this.autoOrbit && !this.dragging && this.userHold <= 0) this.camGoal.az += dt * 0.044;
+    this.userHold = Math.max(0, this.userHold - dt);
+    const t = 1 - Math.exp(-dt * 4.1);
+    this.cam.az += (this.camGoal.az - this.cam.az) * t;
+    this.cam.el += (this.camGoal.el - this.cam.el) * t;
+    this.cam.dist += (this.camGoal.dist - this.cam.dist) * t;
+    this.cam.tx += (this.camGoal.tx - this.cam.tx) * t;
+    this.cam.ty += (this.camGoal.ty - this.cam.ty) * t;
+    this.cam.tz += (this.camGoal.tz - this.cam.tz) * t;
+    const cp = Math.cos(this.cam.el), sp = Math.sin(this.cam.el);
+    const eye = [
+      this.cam.tx + Math.sin(this.cam.az) * cp * this.cam.dist,
+      this.cam.ty + sp * this.cam.dist,
+      this.cam.tz + Math.cos(this.cam.az) * cp * this.cam.dist
+    ];
+    const target = [this.cam.tx, this.cam.ty, this.cam.tz];
+    const view = mat4(), proj = mat4();
+    look(view, eye, target, [0, 1, 0]);
+    persp(proj, 42 * D2R, this.width / Math.max(1, this.height), 0.08, 180);
+    m4mul(this.lastVP, proj, view);
+    this.lastView = view;
+    this.lastProj = proj;
+    this.cameraPos = eye;
+    this.camFwd = norm3(sub3(target, eye));
+    this.camRight = norm3(cross3(this.camFwd, [0, 1, 0]));
+    this.camUp = norm3(cross3(this.camRight, this.camFwd));
+    this.tanHalf = Math.tan(42 * D2R / 2);
+    this.aspect = this.width / Math.max(1, this.height);
+  };
+
+  /* --------------------------- sun & sky ---------------------------- */
+  function solarPosition(latDeg, lonDeg, date) {
+    const rad = Math.PI / 180;
+    const jd = date.getTime() / 86400000 + 2440587.5;
+    const n = jd - 2451545.0;
+    const L = ((280.460 + 0.9856474 * n) % 360 + 360) % 360;
+    const g = (((357.528 + 0.9856003 * n) % 360) + 360) % 360 * rad;
+    const lambda = (L + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * rad;
+    const eps = (23.439 - 0.0000004 * n) * rad;
+    const ra = Math.atan2(Math.cos(eps) * Math.sin(lambda), Math.cos(lambda));
+    const dec = Math.asin(Math.sin(eps) * Math.sin(lambda));
+    const gmst = (((18.697374558 + 24.06570982441908 * n) % 24) + 24) % 24;
+    const lst = gmst * 15 + lonDeg;
+    let H = (((lst - ra / rad + 540) % 360) - 180) * rad;
+    const lat = latDeg * rad;
+    const alt = Math.asin(Math.sin(lat) * Math.sin(dec) + Math.cos(lat) * Math.cos(dec) * Math.cos(H));
+    const azSouth = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(lat) - Math.tan(dec) * Math.cos(lat));
+    const az = azSouth + Math.PI;
+    const ca = Math.cos(alt);
+    return {
+      dir: norm3([Math.sin(az) * ca, Math.sin(alt), -Math.cos(az) * ca]),
+      alt, az
+    };
+  }
+
+  function mixV(a, b, t) {
+    return [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
+  }
+  function mulV(a, s) {
+    return [a[0] * s, a[1] * s, a[2] * s];
+  }
+  function luma(c) {
+    return c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722;
+  }
+
+  WS.prototype._updateSun = function (now) {
+    const env = this.env || {};
+    const lat = Number(this.place.latitude);
+    const lon = Number(this.place.longitude);
+    const sp = solarPosition(Number.isFinite(lat) ? lat : 31.23, Number.isFinite(lon) ? lon : 121.47, now);
+    const alt = sp.alt;
+    const day = smoothstep(-0.085, 0.10, alt);
+    const twilight = clamp(Math.exp(-Math.pow(alt / 0.16, 2)) * smoothstep(-0.45, 0.01, alt), 0, 1);
+    const cloudFrac = clamp((Number(env.cloud) || 0) / 100, 0, 1);
+    const lightK = env.shortwave != null ? clamp((Number(env.shortwave) || 0) / 850, 0, 1.15) : 0.62;
+
+    const mdRaw = [-sp.dir[0], Math.max(0.17, -sp.dir[1] * 1.04), -sp.dir[2] + 0.16];
+    const moonDir = norm3(mdRaw);
+    const moonUp = smoothstep(0.0, 0.24, moonDir[1]) * (1 - day);
+
+    const sunStrength = smoothstep(-0.02, 0.25, alt) * (0.56 + 0.54 * lightK) * (1 - 0.28 * cloudFrac);
+    let lightDir, lightColor, shadowOn;
+    if (alt > -0.035) {
+      lightDir = sp.dir;
+      const warm = 1 - smoothstep(0.0, 0.36, alt);
+      const base = [mix(2.15, 2.30, warm), mix(1.78, 1.16, warm), mix(1.38, 0.58, warm)];
+      lightColor = mulV(base, sunStrength);
+      shadowOn = luma(lightColor) > 0.04;
+    } else {
+      lightDir = moonDir;
+      const k = moonUp * 0.95;
+      lightColor = [0.23 * k, 0.32 * k, 0.50 * k];
+      shadowOn = luma(lightColor) > 0.018;
+    }
+
+    const skyScale = (0.66 + 0.48 * lightK) * (1 - 0.28 * cloudFrac);
+    let zenithDay = mulV([0.026, 0.086, 0.265], skyScale);
+    let horizonDay = mulV([0.095, 0.255, 0.530], skyScale);
+    horizonDay = mixV(horizonDay, mulV([0.22, 0.34, 0.46], skyScale), cloudFrac * 0.22);
+    horizonDay = mixV(horizonDay, [0.74, 0.44, 0.26], twilight * 0.5);
+    const zenithNight = [0.0032, 0.0075, 0.020];
+    const horizonNight = [0.011, 0.019, 0.038];
+    const nightFog = [0.008, 0.013, 0.024];
+    const dayFog = mixV(mulV([0.080, 0.160, 0.260], skyScale), [0.20, 0.27, 0.32], cloudFrac * 0.45);
+    let fogColor = mixV(nightFog, dayFog, day);
+    fogColor = mixV(fogColor, [0.27, 0.14, 0.07], twilight * 0.16);
+
+    const skyAmb = mixV([0.016, 0.024, 0.042], [0.17, 0.215, 0.27], day);
+    const groundAmb = mixV([0.008, 0.011, 0.016], [0.105, 0.115, 0.095], day);
+    const moonColor = [0.052 * (1 - day), 0.076 * (1 - day), 0.120 * (1 - day)];
+
+    const litDay = mulV(mixV([0.72, 0.76, 0.80], [0.57, 0.60, 0.62], cloudFrac * 0.6), 0.72 + 0.4 * lightK);
+    const shadeDay = mulV(mixV([0.22, 0.26, 0.30], [0.17, 0.19, 0.21], cloudFrac * 0.6), 0.7 + 0.35 * lightK);
+    const litNight = [0.155, 0.185, 0.235];
+    const shadeNight = [0.040, 0.052, 0.072];
+    let cloudLit = mixV(litNight, litDay, day);
+    let cloudShade = mixV(shadeNight, shadeDay, day);
+    cloudLit = mixV(cloudLit, [0.30, 0.16, 0.09], twilight * 0.18 * day);
+
+    const skySunColor = [mix(2.9, 3.4, 1 - smoothstep(0.0, 0.35, alt)), mix(2.45, 1.55, 1 - smoothstep(0.0, 0.35, alt)), mix(1.85, 0.7, 1 - smoothstep(0.0, 0.35, alt))];
+
+    const lightView = mat4(), lightProj = mat4();
+    const center = [0, 1.1, 0];
+    const eye = add3(center, mul3(lightDir, 21));
+    const up = Math.abs(lightDir[1]) > 0.94 ? [1, 0, 0] : [0, 1, 0];
+    look(lightView, eye, center, up);
+    ortho(lightProj, -10.8, 10.8, -10.8, 10.8, 1.0, 46);
+    m4mul(this.lightVP, lightProj, lightView);
+
+    const fogDen = DBG.has("nofog") ? 0 : 0.0085 + cloudFrac * 0.005 + this.fx.rain * 0.008 + (1 - day) * 0.0035;
+    const exposure = 0.94 + (1 - day) * 0.78 + (1 - lightK) * 0.05;
+    const overcast = clamp(Math.max(cloudFrac, this.fx.rain * 0.75), 0, 1);
+
+    const lo = env.cloudLow != null ? clamp(Number(env.cloudLow) / 100, 0, 1) : cloudFrac * 0.46;
+    const mi = env.cloudMid != null ? clamp(Number(env.cloudMid) / 100, 0, 1) : cloudFrac * 0.30;
+    const hi = env.cloudHigh != null ? clamp(Number(env.cloudHigh) / 100, 0, 1) : cloudFrac * 0.24;
+    let low = lo, mid = mi, high = hi;
+    if (cloudFrac > 0.01 && low + mid + high < 0.02) {
+      low = cloudFrac * 0.46; mid = cloudFrac * 0.30; high = cloudFrac * 0.24;
+    }
+
+    this.sun = {
+      alt, day, twilight, skySunDir: sp.dir, moonDir, lightDir, lightColor, shadowOn,
+      skySunColor, zenithDay, horizonDay, zenithNight, horizonNight,
+      fogColor, fogDen, skyAmb, groundAmb, moonColor, cloudLit, cloudShade, exposure, cloudFrac, overcast,
+      shadowOnValue: shadowOn ? 1 : 0
+    };
+    this.cloudCoverage = { low, mid, high };
+    if (DBG.has("nocloud")) this.cloudCoverage = { low: 0, mid: 0, high: 0 };
+  };
+
+  /* ---------------------------- uniforms ----------------------------- */
+  WS.prototype._sceneUniforms = function () {
+    const gl = this.gl, U = this.U.scene, s = this.sun;
+    gl.useProgram(this.P.scene);
+    gl.uniformMatrix4fv(U.uVP, false, this.lastVP);
+    gl.uniform1f(U.uTime, this.time);
+    gl.uniform3fv(U.uCamPos, this.cameraPos);
+    gl.uniform3fv(U.uSunDir, s.lightDir);
+    gl.uniform3fv(U.uSunColor, s.lightColor);
+    gl.uniform3fv(U.uSkyAmb, s.skyAmb);
+    gl.uniform3fv(U.uGroundAmb, s.groundAmb);
+    gl.uniform3fv(U.uFogColor, s.fogColor);
+    gl.uniform3fv(U.uMoonColor, s.moonColor);
+    gl.uniform1f(U.uFogDen, s.fogDen);
+    gl.uniform1f(U.uWet, this.fx.wet);
+    gl.uniform1f(U.uSnow, this.fx.snow);
+    gl.uniform1f(U.uAlpha, 1.0);
+    gl.uniform1i(U.uLampCount, 4);
+    gl.uniformMatrix4fv(U.uLightVP, false, this.lightVP);
+    gl.uniform1f(U.uShadowOn, s.shadowOnValue);
+
+    const lp = new Float32Array(12), lc = new Float32Array(12), lw = new Float32Array(4);
+    const nightLamp = 0.25 + 1.75 * (1 - s.day);
+    for (let i = 0; i < 4; i++) {
+      const p = this.lampPositions[i] || [0, 0, 0, 1];
+      lp[i * 3] = p[0]; lp[i * 3 + 1] = p[1]; lp[i * 3 + 2] = p[2];
+      lc[i * 3] = 1.0; lc[i * 3 + 1] = 0.47; lc[i * 3 + 2] = 0.17;
+      lw[i] = (p[3] || 1) * nightLamp;
+    }
+    gl.uniform3fv(U["uLampPos[0]"], lp);
+    gl.uniform3fv(U["uLampColor[0]"], lc);
+    gl.uniform1fv(U["uLampPower[0]"], lw);
+
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.shadow.tex);
+    gl.uniform1i(U.uShadow, 1);
+    gl.activeTexture(gl.TEXTURE0);
+  };
+
+  WS.prototype._skyUniforms = function () {
+    const gl = this.gl, U = this.U.sky, s = this.sun;
+    gl.useProgram(this.P.sky);
+    gl.uniform3fv(U.uCamPos, this.cameraPos);
+    gl.uniform3fv(U.uCamFwd, this.camFwd);
+    gl.uniform3fv(U.uCamRight, this.camRight);
+    gl.uniform3fv(U.uCamUp, this.camUp);
+    gl.uniform1f(U.uAspect, this.aspect);
+    gl.uniform1f(U.uTanHalf, this.tanHalf);
+    gl.uniform1f(U.uTime, this.time);
+    gl.uniform1f(U.uDay, s.day);
+    gl.uniform1f(U.uTwilight, s.twilight);
+    gl.uniform3fv(U.uSunDir, s.skySunDir);
+    gl.uniform3fv(U.uMoonDir, s.moonDir);
+    gl.uniform3fv(U.uSunColor, s.skySunColor);
+    gl.uniform3fv(U.uZenithDay, s.zenithDay);
+    gl.uniform3fv(U.uHorizonDay, s.horizonDay);
+    gl.uniform3fv(U.uZenithNight, s.zenithNight);
+    gl.uniform3fv(U.uHorizonNight, s.horizonNight);
+    gl.uniform3fv(U.uFogColor, s.fogColor);
+    gl.uniform1f(U.uUV, clamp((Number(this.env?.uv) || 0) / 11, 0, 1));
+    gl.uniform1f(U.uOvercast, s.overcast);
+  };
+
+  WS.prototype._drawBatch = function (batch, water) {
+    const gl = this.gl, U = this.U.scene, m = batch.mat;
+    gl.uniform1f(U.uEmissive, m.emissive || 0);
+    gl.uniform1f(U.uRough, m.rough != null ? m.rough : 0.8);
+    gl.uniform1f(U.uMetal, m.metal || 0);
+    gl.uniform1f(U.uAlpha, m.alpha != null ? m.alpha : 1);
+    gl.uniform1f(U.uWater, water ? 1 : 0);
+    gl.bindVertexArray(batch.vao);
+    gl.drawArrays(gl.TRIANGLES, 0, batch.count);
+  };
+
+  /* ------------------------------ draw ------------------------------- */
+  WS.prototype._draw = function () {
+    const gl = this.gl, T = this.targets, s = this.sun;
+    if (!T) return;
+    this.pixelRatio = this.width / Math.max(1, this.cssW);
+    gl.disable(gl.CULL_FACE);
+
+    /* shadow pass */
+    if (s.shadowOn) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadow.fbo);
+      gl.viewport(0, 0, this.shadow.size, this.shadow.size);
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
+      gl.clear(gl.DEPTH_BUFFER_BIT);
+      gl.useProgram(this.P.shadow);
+      gl.uniformMatrix4fv(this.U.shadow.uLightVP, false, this.lightVP);
+      for (const b of this.batches) {
+        if (b.name === "glass" || b.name === "light" || b.name === "water") continue;
+        gl.bindVertexArray(b.vao);
+        gl.drawArrays(gl.TRIANGLES, 0, b.count);
+      }
+    }
+
+    /* scene pass */
+    gl.bindFramebuffer(gl.FRAMEBUFFER, T.sceneFBO);
+    gl.viewport(0, 0, T.w, T.h);
+    gl.clearColor(0.003, 0.005, 0.010, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.disable(gl.BLEND);
+    gl.disable(gl.DEPTH_TEST);
+    gl.depthMask(false);
+    this._skyUniforms();
+    gl.bindVertexArray(this.fsVAO);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthMask(true);
+    this._sceneUniforms();
+    for (const b of this.batches) {
+      if (b.name === "glass") continue;
+      this._drawBatch(b, b.name === "water");
+    }
+
+    /* clouds */
+    const cov = this.cloudCoverage || { low: 0, mid: 0, high: 0 };
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+    gl.useProgram(this.P.cloud);
+    const cu = this.U.cloud;
+    gl.uniformMatrix4fv(cu.uVP, false, this.lastVP);
+    gl.uniform3fv(cu.uCamRight, this.camRight);
+    gl.uniform3fv(cu.uCamUp, this.camUp);
+    gl.uniform1f(cu.uLow, cov.low);
+    gl.uniform1f(cu.uMid, cov.mid);
+    gl.uniform1f(cu.uHigh, cov.high);
+    gl.uniform1f(cu.uSea, 1.0);
+    gl.uniform1f(cu.uTime, this.time);
+    gl.uniform3fv(cu.uCloudLit, s.cloudLit);
+    gl.uniform3fv(cu.uCloudShade, s.cloudShade);
+    gl.uniform3fv(cu.uSunColor, s.skySunColor);
+    gl.uniform1f(cu.uDay, s.day);
+    gl.bindVertexArray(this.cloud.vao);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.cloud.count);
+
+    /* rain */
+    if (this.fx.rain > 0.012) {
+      const rn = Math.min(this.rain.count, Math.floor(this.rain.count * clamp(0.07 + 0.93 * Math.pow(this.fx.rain, 0.62), 0, 1)));
+      if (rn > 0) {
+        const windRad = (Number(this.env?.windDir) || 0) * D2R;
+        const wind = clamp((Number(this.env?.windSpeed) || 0) / 22, 0, 1.2) * Math.sin(windRad);
+        gl.useProgram(this.P.rain);
+        const ru = this.U.rain;
+        gl.uniformMatrix4fv(ru.uVP, false, this.lastVP);
+        gl.uniform1f(ru.uTime, this.time);
+        gl.uniform1f(ru.uRain, this.fx.rain);
+        gl.uniform1f(ru.uWind, wind);
+        gl.uniform3fv(ru.uCamPos, this.cameraPos);
+        gl.uniform1f(ru.uScale, clamp(this.pixelRatio, 1, 2));
+        gl.bindVertexArray(this.rain.vao);
+        gl.drawArrays(gl.POINTS, 0, rn);
+      }
+    }
+
+    /* ripples */
+    if (this.fx.rain > 0.015 && this.fx.wet > 0.03) {
+      gl.useProgram(this.P.ripple);
+      const pu = this.U.ripple;
+      gl.uniformMatrix4fv(pu.uVP, false, this.lastVP);
+      gl.uniform1f(pu.uTime, this.time);
+      gl.uniform1f(pu.uRain, this.fx.rain);
+      gl.bindVertexArray(this.ripples.vao);
+      const dropCount = Math.min(this.ripples.count, Math.round(6 + this.fx.rain * 40));
+      gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, dropCount);
+    }
+
+    /* glass last for tint over weather */
+    const glass = this.batches.find(b => b.name === "glass");
+    if (glass) {
+      gl.useProgram(this.P.scene);
+      gl.uniform1f(this.U.scene.uEmissive, glass.mat.emissive || 0.1);
+      gl.uniform1f(this.U.scene.uRough, glass.mat.rough || 0.08);
+      gl.uniform1f(this.U.scene.uMetal, glass.mat.metal || 0.2);
+      gl.uniform1f(this.U.scene.uAlpha, glass.mat.alpha != null ? glass.mat.alpha : 0.24);
+      gl.uniform1f(this.U.scene.uWater, 0);
+      gl.bindVertexArray(glass.vao);
+      gl.drawArrays(gl.TRIANGLES, 0, glass.count);
+    }
+    gl.disable(gl.BLEND);
+    gl.depthMask(true);
+
+    /* bloom */
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.BLEND);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, T.bloomFA);
+    gl.viewport(0, 0, T.bw, T.bh);
+    gl.useProgram(this.P.bright);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, T.sceneTex);
+    gl.uniform1i(this.U.bright.uTex, 0);
+    gl.uniform1f(this.U.bright.uThreshold, this.hdr ? 1.02 : 0.82);
+    gl.bindVertexArray(this.fsVAO);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, T.bloomFB);
+    gl.useProgram(this.P.blur);
+    gl.bindTexture(gl.TEXTURE_2D, T.bloomA);
+    gl.uniform1i(this.U.blur.uTex, 0);
+    gl.uniform2f(this.U.blur.uTexel, 1 / T.bw, 1 / T.bh);
+    gl.uniform2f(this.U.blur.uDir, 1, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, T.bloomFA);
+    gl.bindTexture(gl.TEXTURE_2D, T.bloomB);
+    gl.uniform2f(this.U.blur.uDir, 0, 1);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    /* composite */
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, T.w, T.h);
+    gl.useProgram(this.P.comp);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, T.sceneTex);
+    gl.uniform1i(this.U.comp.uScene, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, T.bloomA);
+    gl.uniform1i(this.U.comp.uBloom, 1);
+    gl.uniform1f(this.U.comp.uBloomAmt, DBG.has("nobloom") ? 0 : 0.58);
+    gl.uniform1f(this.U.comp.uExposure, s.exposure);
+    gl.uniform1f(this.U.comp.uVignette, 0.38);
+    gl.uniform1f(this.U.comp.uGrain, 0.035);
+    gl.uniform1f(this.U.comp.uTime, this.time);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindVertexArray(this.fsVAO);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindVertexArray(null);
+    gl.depthMask(true);
+    gl.disable(gl.DEPTH_TEST);
+  };
+
+  WS.prototype.snapEnvironment = function () {
+    if (!this.fx || !this.fxTarget) return;
+    for (const k of Object.keys(this.fxTarget)) this.fx[k] = this.fxTarget[k];
+  };
+
+  WS.prototype.render = function (timeSec, dt, nowDate) {    if (!this.ready) return;
+    const d = clamp(dt || 0.016, 0.001, 0.1);
+    this.time = timeSec;
+    this._resize();
+    const now = nowDate instanceof Date ? nowDate : new Date();
+    const f = this.fx, t = this.fxTarget;
+    const kFast = 1 - Math.exp(-d * 2.2);
+    const kMed = 1 - Math.exp(-d * 1.25);
+    const kSlow = 1 - Math.exp(-d * 0.62);
+    f.rain += (t.rain - f.rain) * kFast;
+    f.cloud += (t.cloud - f.cloud) * kMed;
+    f.uv += (t.uv - f.uv) * kFast;
+    f.light += (t.light - f.light) * kFast;
+    f.wet += (t.wet - f.wet) * kSlow;
+    f.snow += (t.snow - f.snow) * kSlow;
+    this._updateSun(now);
+    this._updateCamera(d, now);
+    this._draw();
+  };
+})();
+
+</script>
+<script>
+"use strict";
+/* =========================================================================
+   ATMOS° — data, UI, interaction. Renderer lives in weather-scene.js.
+   Open-Meteo forecast + geocoding, no API key.
+   ========================================================================= */
+(() => {
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const num = (v, d = 0) => (Number.isFinite(+v) ? +v : d);
+  const pad2 = n => String(n).padStart(2, "0");
+  const D2R = Math.PI / 180;
+  const API = "https://api.open-meteo.com/v1/forecast";
+  const GEO = "https://geocoding-api.open-meteo.com/v1/search";
+  const REVERSE = "https://api.bigdatacloud.net/data/reverse-geocode-client";
+  const REFRESH_MS = 10 * 60 * 1000;
+  const FETCH_TIMEOUT = 14000;
+  const STORE_PLACE = "atmos.place.v1";
+
+  const DEFAULT_PLACE = {
+    name: "上海",
+    admin1: "上海市",
+    country: "中国",
+    latitude: 31.2304,
+    longitude: 121.4737,
+    timezone: "Asia/Shanghai"
+  };
+
+  const params = new URLSearchParams(location.search);
+  const forcedDemo = params.get("demo");
+  const debugOnce = params.has("once");
+  const forcedHour = params.has("hour") ? clamp(parseInt(params.get("hour"), 10) || 0, 0, 23) : null;
+
+  const state = {
+    place: loadPlace(),
+    env: null,
+    chart: null,
+    hourly: null,
+    daily: null,
+    currentTime: null,
+    demo: false,
+    demoReason: "",
+    live: false,
+    loading: true,
+    tab: "rain",
+    labels: true,
+    autoOrbit: !params.has("still"),
+    view: 0,
+    fetchedAt: 0,
+    nextRefresh: 0,
+    refreshing: false,
+    demoMode: !!forcedDemo,
+    demoKind: forcedDemo || "rain",
+    demoHour: forcedHour,
+    formatters: null,
+    lastClock: 0,
+    lastEnvUI: 0,
+    tlIndex: -1,
+    tlActive: false
+  };
+
+  let scene = null;
+  let markerEls = {};
+  let toastTimer = 0;
+  let searchTimer = 0;
+  let searchSeq = 0;
+  let lastFrame = 0;
+  let fpsSample = { t: 0, n: 0 };
+
+  /* ------------------------------------------------------------------ */
+  /* helpers                                                             */
+  /* ------------------------------------------------------------------ */
+  function loadPlace() {
+    try {
+      const raw = localStorage.getItem(STORE_PLACE);
+      if (!raw) return { ...DEFAULT_PLACE };
+      const p = JSON.parse(raw);
+      if (!Number.isFinite(+p.latitude) || !Number.isFinite(+p.longitude)) return { ...DEFAULT_PLACE };
+      return {
+        name: String(p.name || "上海"),
+        admin1: String(p.admin1 || ""),
+        country: String(p.country || ""),
+        latitude: +p.latitude,
+        longitude: +p.longitude,
+        timezone: String(p.timezone || "Asia/Shanghai")
+      };
+    } catch (e) {
+      return { ...DEFAULT_PLACE };
+    }
+  }
+
+  function savePlace() {
+    try { localStorage.setItem(STORE_PLACE, JSON.stringify(state.place)); } catch (e) {}
+  }
+
+  function getNow() {
+    const d = new Date();
+    if (state.demoHour != null) d.setHours(state.demoHour, 0, 0, 0);
+    return d;
+  }
+
+  function isoLocal(d) {
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:00`;
+  }
+
+  function makeFormatters(tz) {
+    try {
+      return {
+        clock: new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }),
+        hm: new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
+        date: new Intl.DateTimeFormat("zh-CN", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" })
+      };
+    } catch (e) {
+      return {
+        clock: new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }),
+        hm: new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
+        date: new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" })
+      };
+    }
+  }
+
+  function ensureFormatters() {
+    const tz = state.place.timezone || "Asia/Shanghai";
+    if (!state.formatters || state.formatters.tz !== tz) {
+      const f = makeFormatters(tz);
+      f.tz = tz;
+      state.formatters = f;
+    }
+    return state.formatters;
+  }
+
+  function parts(fmt, d) {
+    const out = {};
+    try {
+      for (const p of fmt.formatToParts(d)) out[p.type] = p.value;
+    } catch (e) {}
+    return out;
+  }
+
+  function formatClock(d) {
+    const p = parts(ensureFormatters().clock, d);
+    return { hm: `${p.hour || "--"}:${p.minute || "--"}`, ss: p.second || "--" };
+  }
+
+  function formatDate(d) {
+    const p = parts(ensureFormatters().date, d);
+    return {
+      date: `${p.year || "----"}.${p.month || "--"}.${p.day || "--"}`,
+      weekday: p.weekday || ""
+    };
+  }
+
+  function formatHM(d) {
+    const p = parts(ensureFormatters().hm, d);
+    return `${p.hour || "--"}:${p.minute || "--"}`;
+  }
+
+  function setText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  function setHTML(id, html) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+  }
+
+  function showToast(msg, ms = 3200) {
+    if (debugOnce) return;
+    const el = $("#toast");
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.add("on");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove("on"), ms);
+  }
+
+  function fatal(msg) {
+    const el = $("#err");
+    if (el) {
+      el.style.display = "grid";
+      el.textContent = msg;
+    }
+    const ld = $("#loading");
+    if (ld) ld.classList.add("gone");
+  }
+
+  async function getJSON(url, timeout = FETCH_TIMEOUT) {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), timeout);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal, mode: "cors", headers: { Accept: "application/json" }, cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } finally {
+      clearTimeout(tid);
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* weather codes                                                       */
+  /* ------------------------------------------------------------------ */
+  const WX = {
+    0: ["晴", "CLEAR", "clear"],
+    1: ["大致晴朗", "MOSTLY CLEAR", "clear"],
+    2: ["多云", "PARTLY CLOUDY", "cloud"],
+    3: ["阴", "OVERCAST", "cloud"],
+    45: ["雾", "FOG", "fog"],
+    48: ["冻雾", "RIME FOG", "fog"],
+    51: ["小毛毛雨", "LIGHT DRIZZLE", "rain"],
+    53: ["毛毛雨", "DRIZZLE", "rain"],
+    55: ["强毛毛雨", "DENSE DRIZZLE", "rain"],
+    56: ["冻毛毛雨", "FREEZING DRIZZLE", "rain"],
+    57: ["强冻毛毛雨", "DENSE FREEZING DRIZZLE", "rain"],
+    61: ["小雨", "LIGHT RAIN", "rain"],
+    63: ["中雨", "RAIN", "rain"],
+    65: ["大雨", "HEAVY RAIN", "rain"],
+    66: ["冻雨", "FREEZING RAIN", "rain"],
+    67: ["强冻雨", "HEAVY FREEZING RAIN", "rain"],
+    71: ["小雪", "LIGHT SNOW", "snow"],
+    73: ["中雪", "SNOW", "snow"],
+    75: ["大雪", "HEAVY SNOW", "snow"],
+    77: ["米雪", "SNOW GRAINS", "snow"],
+    80: ["小阵雨", "LIGHT SHOWERS", "rain"],
+    81: ["阵雨", "SHOWERS", "rain"],
+    82: ["强阵雨", "VIOLENT SHOWERS", "rain"],
+    85: ["小阵雪", "SNOW SHOWERS", "snow"],
+    86: ["强阵雪", "HEAVY SNOW SHOWERS", "snow"],
+    95: ["雷暴", "THUNDERSTORM", "storm"],
+    96: ["雷暴伴冰雹", "THUNDERSTORM + HAIL", "storm"],
+    99: ["强雷暴冰雹", "SEVERE THUNDERSTORM", "storm"]
+  };
+
+  function weatherInfo(code) {
+    const c = Number(code);
+    const row = WX[c] || ["未知天气", "UNKNOWN", "cloud"];
+    return { code: c, zh: row[0], en: row[1], group: row[2] };
+  }
+
+  function uvInfo(uv) {
+    const v = num(uv);
+    if (v < 0.5) return { label: "无", cls: "" };
+    if (v < 3) return { label: "低", cls: "" };
+    if (v < 6) return { label: "中等", cls: "mid" };
+    if (v < 8) return { label: "高", cls: "high" };
+    if (v < 11) return { label: "很高", cls: "high" };
+    return { label: "极高", cls: "extreme" };
+  }
+
+  function windName(deg) {
+    const dirs = ["北", "东北偏北", "东北", "东北偏东", "东", "东南偏东", "东南", "东南偏南", "南", "西南偏南", "西南", "西南偏西", "西", "西北偏西", "西北", "西北偏北"];
+    return dirs[Math.round(((num(deg) % 360) + 360) % 360 / 22.5) % 16];
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Open-Meteo                                                          */
+  /* ------------------------------------------------------------------ */
+  function forecastUrl(place) {
+    const q = new URLSearchParams({
+      latitude: String(place.latitude),
+      longitude: String(place.longitude),
+      current: "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m",
+      hourly: "temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,rain,showers,snowfall,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,uv_index,shortwave_radiation,direct_radiation,diffuse_radiation,weather_code,is_day,visibility",
+      daily: "sunrise,sunset,uv_index_max,precipitation_sum,daylight_duration",
+      timezone: "auto",
+      forecast_days: "4",
+      past_days: "3",
+      temperature_unit: "celsius",
+      wind_speed_unit: "ms",
+      precipitation_unit: "mm"
+    });
+    return `${API}?${q.toString()}`;
+  }
+
+  function findHourIndex(times, iso) {
+    if (!Array.isArray(times) || !times.length) return 0;
+    const hour = iso ? String(iso).slice(0, 13) : "";
+    if (hour) {
+      const i = times.findIndex(t => t.slice(0, 13) === hour);
+      if (i >= 0) return i;
+      const j = times.findIndex(t => t >= hour);
+      if (j >= 0) return j;
+    }
+    return 0;
+  }
+
+  function normalizeForecast(j) {
+    const cur = j.current || {};
+    const hourly = j.hourly || {};
+    const daily = j.daily || {};
+    const times = Array.isArray(hourly.time) ? hourly.time : [];
+    const idx = findHourIndex(times, cur.time);
+    const at = (arr, i) => (Array.isArray(arr) ? num(arr[i], 0) : 0);
+    const code = cur.weather_code ?? hourly.weather_code?.[idx] ?? 0;
+    const info = weatherInfo(code);
+    const temp = num(cur.temperature_2m, at(hourly.temperature_2m, idx));
+    const precipNow = num(cur.precipitation, 0);
+    const hourlyRain = at(hourly.precipitation, idx);
+    const rainRate = Math.max(precipNow * 4, hourlyRain);
+    const cloud = clamp(num(cur.cloud_cover, at(hourly.cloud_cover, idx)), 0, 100);
+    const cloudLow = clamp(at(hourly.cloud_cover_low, idx), 0, 100);
+    const cloudMid = clamp(at(hourly.cloud_cover_mid, idx), 0, 100);
+    const cloudHigh = clamp(at(hourly.cloud_cover_high, idx), 0, 100);
+    const uv = Math.max(0, at(hourly.uv_index, idx));
+    const shortwave = Math.max(0, at(hourly.shortwave_radiation, idx));
+    const isDay = Number(cur.is_day) === 1;
+    const snow = info.group === "snow" || (temp <= 1.2 && rainRate > 0.02);
+    const storm = info.group === "storm";
+    const rainNext = at(hourly.precipitation, idx + 1);
+    const rainTotal = Array.isArray(hourly.precipitation)
+      ? hourly.precipitation.slice(idx + 1, idx + 25).reduce((s, v) => s + num(v), 0)
+      : 0;
+    const take = arr => (Array.isArray(arr) ? arr.slice(idx, idx + 24).map(v => num(v, 0)) : new Array(24).fill(0));
+    const chart = {
+      labels: times.slice(idx, idx + 24).map(t => String(t).slice(11, 16)),
+      rain: take(hourly.precipitation),
+      cloud: take(hourly.cloud_cover),
+      cloudLow: take(hourly.cloud_cover_low),
+      cloudMid: take(hourly.cloud_cover_mid),
+      cloudHigh: take(hourly.cloud_cover_high),
+      uv: take(hourly.uv_index),
+      light: take(hourly.shortwave_radiation),
+      temp: take(hourly.temperature_2m),
+      rainChance: take(hourly.precipitation_probability)
+    };
+    while (chart.labels.length < 24) {
+      const n = chart.labels.length;
+      chart.labels.push(`${pad2((idx + n) % 24)}:00`);
+    }
+    const dailyRain = Array.isArray(daily.precipitation_sum) ? num(daily.precipitation_sum[0], 0) : 0;
+    const uvMax = Array.isArray(daily.uv_index_max) ? num(daily.uv_index_max[0], 0) : 0;
+    const env = {
+      temp,
+      apparent: num(cur.apparent_temperature, temp),
+      humidity: clamp(num(cur.relative_humidity_2m, 0), 0, 100),
+      precipitation: precipNow,
+      rainRate,
+      rainNext,
+      rainTotal24: rainTotal,
+      dailyRain,
+      cloud,
+      cloudLow,
+      cloudMid,
+      cloudHigh,
+      uv,
+      uvMax,
+      shortwave,
+      isDay,
+      code,
+      condition: info.zh,
+      conditionEn: info.en,
+      group: info.group,
+      storm,
+      snow,
+      windSpeed: num(cur.wind_speed_10m, 0),
+      windDir: num(cur.wind_direction_10m, 0),
+      windGust: num(cur.wind_gusts_10m, 0),
+      pressure: num(cur.pressure_msl, 0),
+      visibility: Math.max(0, at(hourly.visibility, idx)),
+      sunrise: Array.isArray(daily.sunrise) ? daily.sunrise[0] : "",
+      sunset: Array.isArray(daily.sunset) ? daily.sunset[0] : ""
+    };
+    const place = {
+      ...state.place,
+      latitude: num(j.latitude, state.place.latitude),
+      longitude: num(j.longitude, state.place.longitude),
+      timezone: j.timezone || state.place.timezone || "Asia/Shanghai"
+    };
+    const fullHourly = {
+      time: times,
+      precipitation: hourly.precipitation || [],
+      temperature_2m: hourly.temperature_2m || [],
+      humidity: hourly.relative_humidity || [],
+      cloud_cover: hourly.cloud_cover || [],
+      cloud_cover_low: hourly.cloud_cover_low || [],
+      cloud_cover_mid: hourly.cloud_cover_mid || [],
+      cloud_cover_high: hourly.cloud_cover_high || [],
+      uv_index: hourly.uv_index || [],
+      shortwave_radiation: hourly.shortwave_radiation || [],
+      weather_code: hourly.weather_code || [],
+      is_day: hourly.is_day || [],
+      wind_speed: hourly.wind_speed_10m || [],
+      wind_direction: hourly.wind_direction_10m || []
+    };
+    return {
+      place,
+      env,
+      chart,
+      hourly: fullHourly,
+      currentIdx: idx,
+      daily,
+      currentTime: cur.time || "",
+      fetchedAt: Date.now(),
+      demo: false
+    };
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* demo / fallback                                                     */
+  /* ------------------------------------------------------------------ */
+  function buildDemo(kind = "rain") {
+    const base = getNow();
+    base.setMinutes(0, 0, 0);
+    const times = [];
+    for (let i = 0; i < 48; i++) {
+      const t = new Date(base.getTime() + i * 3600 * 1000);
+      times.push(isoLocal(t));
+    }
+    const k = kind === "day" ? "day" : kind === "night" ? "night" : "rain";
+    const rainCurve = [5.8, 6.4, 5.1, 3.6, 2.1, 1.2, 0.6, 0.3, 0.2, 0.1, 0.1, 0, 0, 0, 0, 0, 0, 0, 0.2, 0.5, 0.9, 1.4, 1.1, 0.7, 0.4, 0.2, 0.1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    const tempCurve = [18.4, 18.1, 17.8, 17.5, 17.2, 17.0, 16.9, 17.2, 18.0, 19.1, 20.2, 21.2, 22.1, 22.8, 23.2, 23.4, 23.1, 22.5, 21.8, 21.0, 20.2, 19.5, 19.0, 18.6, 18.2, 17.9, 17.6, 17.3, 17.0, 16.8, 16.6, 16.5, 16.8, 17.4, 18.2, 19.0, 19.8, 20.5, 21.0, 21.4, 21.6, 21.4, 20.9, 20.2, 19.5, 18.9, 18.4, 18.0];
+    const isNight = k === "night";
+    const rain = times.map((t, i) => (k === "rain" ? rainCurve[i] : 0));
+    const cloudBase = k === "rain" ? 94 : k === "night" ? 14 : 38;
+    const cloud = times.map((t, i) => clamp(cloudBase + Math.sin(i * 0.42) * (k === "rain" ? 5 : 12) + (i < 7 && k === "rain" ? 4 : 0), 0, 100));
+    const cloudLow = cloud.map(v => clamp(v * (k === "rain" ? 0.82 : 0.34), 0, 100));
+    const cloudMid = cloud.map((v, i) => clamp(v * 0.55 + Math.sin(i * 0.7) * 7, 0, 100));
+    const cloudHigh = cloud.map((v, i) => clamp(v * 0.32 + Math.cos(i * 0.55) * 9, 0, 100));
+    const daylight = h => {
+      const x = (h - 6.1) / 12.2;
+      return Math.sin(clamp(x, 0, 1) * Math.PI);
+    };
+    const uv = times.map((t, i) => {
+      const h = (base.getHours() + i) % 24;
+      if (isNight) return 0;
+      return Math.max(0, daylight(h) * (k === "day" ? 8.2 : 2.2) - (k === "rain" ? 0.5 : 0));
+    });
+    const light = times.map((t, i) => {
+      const h = (base.getHours() + i) % 24;
+      if (isNight) return 0;
+      return Math.max(0, daylight(h) * (k === "day" ? 880 : 310) * (1 - cloud[i] / 190));
+    });
+    const idx = 0;
+    const code = k === "rain" ? 63 : k === "day" ? 2 : 0;
+    const info = weatherInfo(code);
+    const rainRate = k === "rain" ? rain[idx] : 0;
+    const env = {
+      temp: k === "rain" ? 18.4 : k === "night" ? 16.1 : 22.6,
+      apparent: k === "rain" ? 17.6 : k === "night" ? 15.2 : 22.1,
+      humidity: k === "rain" ? 89 : k === "night" ? 61 : 54,
+      precipitation: rainRate / 4,
+      rainRate,
+      rainNext: rain[1],
+      rainTotal24: rain.slice(1, 25).reduce((s, v) => s + v, 0),
+      dailyRain: rr(k === "rain" ? 28.6 : 0),
+      cloud: cloud[idx],
+      cloudLow: cloudLow[idx],
+      cloudMid: cloudMid[idx],
+      cloudHigh: cloudHigh[idx],
+      uv: uv[idx],
+      uvMax: k === "rain" ? 2.2 : k === "night" ? 0 : 7.6,
+      shortwave: light[idx],
+      isDay: k === "night" ? false : k === "day" ? true : daylight(base.getHours()) > 0.02,
+      code,
+      condition: info.zh,
+      conditionEn: info.en,
+      group: info.group,
+      storm: false,
+      snow: false,
+      windSpeed: k === "rain" ? 3.4 : 1.8,
+      windDir: 135,
+      windGust: k === "rain" ? 5.2 : 3.1,
+      pressure: 1008,
+      visibility: k === "rain" ? 4200 : 18000,
+      sunrise: times[0].slice(0, 11) + "06:11",
+      sunset: times[0].slice(0, 11) + "17:42"
+    };
+    const chart = {
+      labels: times.slice(0, 24).map(t => t.slice(11, 16)),
+      rain: rain.slice(0, 24),
+      cloud: cloud.slice(0, 24),
+      cloudLow: cloudLow.slice(0, 24),
+      cloudMid: cloudMid.slice(0, 24),
+      cloudHigh: cloudHigh.slice(0, 24),
+      uv: uv.slice(0, 24),
+      light: light.slice(0, 24),
+      temp: tempCurve.slice(0, 24),
+      rainChance: rain.slice(0, 24).map(v => Math.min(100, v * 14))
+    };
+    return {
+      place: { ...state.place },
+      env,
+      chart,
+      hourly: { time: times, precipitation: rain, temperature_2m: tempCurve, uv_index: uv, shortwave_radiation: light },
+      daily: { precipitation_sum: [env.dailyRain], uv_index_max: [env.uvMax] },
+      currentTime: times[0],
+      fetchedAt: Date.now(),
+      demo: true,
+      demoReason: state.demoMode ? "预览数据" : "网络不可用"
+    };
+  }
+
+  function rr(v) {
+    return Math.round(v * 10) / 10;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* data apply                                                          */
+  /* ------------------------------------------------------------------ */
+  function applyData(d) {
+    const wasDemo = state.demo;
+    state.place = {
+      ...state.place,
+      ...d.place,
+      name: d.place.name || state.place.name,
+      admin1: d.place.admin1 || state.place.admin1 || "",
+      country: d.place.country || state.place.country || ""
+    };
+    state.env = d.env;
+    state.chart = d.chart;
+    state.hourly = d.hourly;
+    state.daily = d.daily;
+    state.currentTime = d.currentTime;
+    state.demo = !!d.demo;
+    state.demoReason = d.demoReason || "";
+    state.fetchedAt = d.fetchedAt || Date.now();
+    state.live = !state.demo;
+    state.loading = false;
+    savePlace();
+    ensureFormatters();
+    if (scene) {
+      scene.setPlace(state.place);
+      scene.setEnvironment(state.env);
+    }
+    renderWeatherUI();
+    setLiveStatus();
+    if (state.demo && !wasDemo) showToast(`已载入示例数据 · ${state.demoReason}`, 4200);
+    if (state.demo) state.demoReason = d.demoReason || state.demoReason;
+  }
+
+  async function refreshWeather(initial = false) {
+    if (state.refreshing) return;
+    state.refreshing = true;
+    if (!initial) setLiveStatus("loading");
+    try {
+      if (state.demoMode) {
+        const d = buildDemo(state.demoKind);
+        applyData(d);
+      } else {
+        const json = await getJSON(forecastUrl(state.place));
+        if (!json || !json.current) throw new Error("无效的天气响应");
+        const d = normalizeForecast(json);
+        d.place.name = state.place.name;
+        d.place.admin1 = state.place.admin1 || d.place.admin1;
+        d.place.country = state.place.country || d.place.country;
+        applyData(d);
+        if (!initial && state.env) showToast(`天气已更新 · ${formatHM(new Date())}`);
+      }
+    } catch (err) {
+      const d = buildDemo("rain");
+      d.place = { ...state.place };
+      d.demoReason = "网络不可用";
+      applyData(d);
+      if (!initial) showToast("刷新失败，已切换到示例数据", 3600);
+    } finally {
+      state.refreshing = false;
+      state.nextRefresh = Date.now() + REFRESH_MS;
+      setLiveStatus();
+    }
+  }
+
+  function setLiveStatus(force) {
+    const pill = $("#livePill");
+    const text = $("#liveText");
+    if (!pill || !text) return;
+    pill.classList.remove("loading", "demo", "bad");
+    if (force === "loading" || (state.refreshing && !state.env)) {
+      pill.classList.add("loading");
+      text.textContent = "连接中";
+      pill.title = "正在请求 Open-Meteo 实时数据";
+    } else if (state.demo) {
+      pill.classList.add("demo");
+      text.textContent = "示例数据";
+      pill.title = state.demoReason || "示例数据";
+    } else if (state.env) {
+      text.textContent = "实时数据";
+      pill.title = "Open-Meteo · 10 分钟自动刷新";
+    } else {
+      pill.classList.add("bad");
+      text.textContent = "等待数据";
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* UI render                                                           */
+  /* ------------------------------------------------------------------ */
+  function renderWeatherUI() {
+    const e = state.env;
+    if (!e) return;
+    state.lastEnvUI = performance.now();
+    const rainPct = clamp(e.rainRate / 20 * 100, 0, 100);
+    const cloudPct = clamp(e.cloud, 0, 100);
+    const uvPct = clamp(e.uv / 12 * 100, 0, 100);
+    const lightPct = clamp(e.shortwave / 1000 * 100, 0, 100);
+
+    setText("rainVal", Number(e.rainRate || 0).toFixed(1));
+    setText("rainDay", Number(e.dailyRain || 0).toFixed(1));
+    setText("rainNext", Number(e.rainNext || 0).toFixed(1));
+    setText("cloudVal", Math.round(e.cloud));
+    setText("cloudLow", `${Math.round(e.cloudLow)}%`);
+    setText("cloudMid", `${Math.round(e.cloudMid)}%`);
+    setText("cloudHigh", `${Math.round(e.cloudHigh)}%`);
+    setText("uvVal", Number(e.uv || 0).toFixed(1));
+    setText("uvMax", Number(e.uvMax || 0).toFixed(1));
+    const ui = uvInfo(e.uv);
+    const uvEl = $("#uvLevel");
+    if (uvEl) {
+      uvEl.textContent = ui.label;
+      uvEl.className = `uv-level ${ui.cls}`;
+    }
+    setText("lightVal", Math.round(e.shortwave || 0));
+    setText("luxVal", Math.round((e.shortwave || 0) * 0.12));
+    setText("dayState", e.isDay ? (e.shortwave < 70 ? "低照度" : "白天") : "夜间");
+
+    const meter = (id, pct) => {
+      const el = document.getElementById(id);
+      if (el) el.style.width = `${pct.toFixed(1)}%`;
+    };
+    meter("rainMeter", rainPct);
+    meter("cloudMeter", cloudPct);
+    meter("uvMeter", uvPct);
+    meter("lightMeter", lightPct);
+
+    const seg = (id, value) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.flexGrow = String(1 + value / 18);
+      el.style.opacity = String(0.28 + value / 155);
+    };
+    seg("segLow", e.cloudLow);
+    seg("segMid", e.cloudMid);
+    seg("segHigh", e.cloudHigh);
+
+    setText("condition", e.condition || "—");
+    setText("temp", String(Math.round(e.temp)));
+    setText("localMeta", `体感 ${Math.round(e.apparent)}° · 湿度 ${Math.round(e.humidity)}% · ${windName(e.windDir)}风 ${Number(e.windSpeed).toFixed(1)} m/s`);
+    setText("mRain", Number(e.rainRate || 0).toFixed(1));
+    setText("mCloud", String(Math.round(e.cloud)));
+    setText("mUV", Number(e.uv || 0).toFixed(1));
+    setText("mLight", String(Math.round(e.shortwave || 0)));
+    setText("placeBtn", state.place.name);
+    setText("trendZone", `${state.place.name} · 24H`);
+    if (state.demo) {
+      setText("dataTime", "示例数据");
+    } else {
+      setText("dataTime", formatHM(new Date(state.fetchedAt)));
+    }
+    updateMarkerText();
+    drawChart();
+    updateRefreshLabel();
+    const tlSlider = $("#tlSlider");
+    if (tlSlider && state.hourly && state.hourly.time) {
+      tlSlider.max = Math.max(119, state.hourly.time.length - 1);
+      tlSlider.value = state.currentIdx || 0;
+    }
+    document.title = `${Math.round(e.temp)}° ${e.condition} · ${state.place.name} — ATMOS° 实时天气`;
+  }
+
+  function updateRefreshLabel() {
+    if (!state.nextRefresh) {
+      setText("refreshIn", "--:--");
+      return;
+    }
+    const left = Math.max(0, state.nextRefresh - Date.now());
+    const m = Math.floor(left / 60000);
+    const s = Math.floor(left % 60000 / 1000);
+    setText("refreshIn", `${pad2(m)}:${pad2(s)}`);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* chart                                                               */
+  /* ------------------------------------------------------------------ */
+  const CHART_META = {
+    rain: { color: "#6fd3ff", unit: "mm/h", key: "rain", fill: ["rgba(111,211,255,.30)", "rgba(111,211,255,0)"] },
+    cloud: { color: "#c7d8e4", unit: "%", key: "cloud", fill: ["rgba(199,216,228,.22)", "rgba(199,216,228,0)"] },
+    uv: { color: "#b995ff", unit: "UVI", key: "uv", fill: ["rgba(185,149,255,.28)", "rgba(185,149,255,0)"] }
+  };
+
+  function chartData() {
+    return state.chart || { labels: [], rain: [], cloud: [], uv: [] };
+  }
+
+  function drawChart() {
+    const cv = $("#chart");
+    if (!cv) return;
+    const box = cv.getBoundingClientRect();
+    if (box.width < 20 || box.height < 20) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const W = Math.round(box.width * dpr);
+    const H = Math.round(box.height * dpr);
+    if (cv.width !== W || cv.height !== H) {
+      cv.width = W;
+      cv.height = H;
+    }
+    const g = cv.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, box.width, box.height);
+    const w = box.width;
+    const h = box.height;
+    const meta = CHART_META[state.tab];
+    const data = chartData();
+    const vals = (data[meta.key] || []).slice(0, 24).map(v => num(v));
+    while (vals.length < 24) vals.push(0);
+    const labels = (data.labels || []).slice(0, 24);
+    const padL = 3;
+    const padR = 5;
+    const padT = 12;
+    const padB = 17;
+    const iw = w - padL - padR;
+    const ih = h - padT - padB;
+    const maxRaw = Math.max(...vals, state.tab === "rain" ? 1 : state.tab === "cloud" ? 40 : 2);
+    const max = state.tab === "rain" ? Math.max(2, Math.ceil(maxRaw / 2) * 2) : state.tab === "cloud" ? 100 : Math.max(2, Math.ceil(maxRaw + 0.5));
+    const x = i => padL + i / 23 * iw;
+    const y = v => padT + ih - clamp(v / max, 0, 1) * ih;
+
+    g.lineWidth = 1;
+    g.strokeStyle = "rgba(154,190,216,.115)";
+    g.font = "7px 'Cascadia Mono',Consolas,monospace";
+    g.fillStyle = "rgba(126,151,169,.78)";
+    g.textAlign = "left";
+    for (let k = 0; k <= 2; k++) {
+      const yy = padT + k / 2 * ih;
+      g.beginPath();
+      g.moveTo(padL, yy + .5);
+      g.lineTo(w - padR, yy + .5);
+      g.stroke();
+    }
+    g.fillStyle = "rgba(126,151,169,.72)";
+    g.textAlign = "right";
+    g.fillText(state.tab === "cloud" ? "100" : state.tab === "uv" ? String(max) : String(max), w - 2, padT + 3);
+    g.fillText("0", w - 2, padT + ih + 2);
+
+    const grad = g.createLinearGradient(0, padT, 0, padT + ih);
+    grad.addColorStop(0, meta.fill[0]);
+    grad.addColorStop(1, meta.fill[1]);
+    g.beginPath();
+    g.moveTo(x(0), padT + ih);
+    for (let i = 0; i < 24; i++) g.lineTo(x(i), y(vals[i]));
+    g.lineTo(x(23), padT + ih);
+    g.closePath();
+    g.fillStyle = grad;
+    g.fill();
+
+    g.beginPath();
+    for (let i = 0; i < 24; i++) {
+      const px = x(i);
+      const py = y(vals[i]);
+      if (i === 0) g.moveTo(px, py);
+      else {
+        const prevX = x(i - 1);
+        const prevY = y(vals[i - 1]);
+        const cx = (prevX + px) / 2;
+        g.bezierCurveTo(cx, prevY, cx, py, px, py);
+      }
+    }
+    g.strokeStyle = meta.color;
+    g.lineWidth = 1.6;
+    g.shadowColor = meta.color;
+    g.shadowBlur = 7;
+    g.stroke();
+    g.shadowBlur = 0;
+
+    const peak = vals.indexOf(Math.max(...vals));
+    if (peak >= 0 && vals[peak] > 0) {
+      g.beginPath();
+      g.arc(x(peak), y(vals[peak]), 2.1, 0, Math.PI * 2);
+      g.fillStyle = meta.color;
+      g.fill();
+    }
+    if (state.tab !== "rain") {
+      g.beginPath();
+      g.moveTo(x(0), padT);
+      g.lineTo(x(0), padT + ih);
+      g.strokeStyle = "rgba(234,247,253,.35)";
+      g.lineWidth = 1;
+      g.setLineDash([2, 3]);
+      g.stroke();
+      g.setLineDash([]);
+    }
+
+    g.font = "7px 'Cascadia Mono',Consolas,monospace";
+    g.fillStyle = "rgba(126,151,169,.72)";
+    g.textAlign = "center";
+    for (let i = 0; i < 24; i += 4) {
+      const t = labels[i] || "--:--";
+      g.fillText(t, x(i), h - 3);
+    }
+
+    const sum = vals.slice(1).reduce((s, v) => s + v, 0);
+    if (state.tab === "rain") {
+      const peakLabel = labels[peak] || "--:--";
+      setText("peakText", `峰值 ${vals[peak].toFixed(1)} ${meta.unit} · ${peakLabel}`);
+      setText("sumText", `未来24h 累计 ${sum.toFixed(1)} mm`);
+    } else if (state.tab === "cloud") {
+      const avg = vals.reduce((s, v) => s + v, 0) / 24;
+      setText("peakText", `平均 ${avg.toFixed(0)}% · 峰值 ${Math.max(...vals).toFixed(0)}%`);
+      setText("sumText", `当前 ${Math.round((state.env?.cloud || 0))}%`);
+    } else {
+      const peakLabel = labels[peak] || "--:--";
+      setText("peakText", `峰值 ${vals[peak].toFixed(1)} UVI · ${peakLabel}`);
+      setText("sumText", `当前 ${Number(state.env?.uv || 0).toFixed(1)} UVI`);
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* markers                                                             */
+  /* ------------------------------------------------------------------ */
+  const MARKERS = [
+    { id: "rain", cls: "k-rain", label: "降水", unit: "mm/h", get: e => Number(e.rainRate || 0).toFixed(1), map: "雨丝密度、下落速度与地面湿润度" },
+    { id: "cloud", cls: "k-cloud", label: "云量", unit: "%", get: e => Math.round(e.cloud), map: "云团数量、云层高度与太阳遮蔽" },
+    { id: "uv", cls: "k-uv", label: "紫外线", unit: "UVI", get: e => Number(e.uv || 0).toFixed(1), map: "日晕强度与紫色光环" },
+    { id: "light", cls: "k-light", label: "光照", unit: "W/m²", get: e => Math.round(e.shortwave || 0), map: "主光强度、曝光与阴影清晰度" }
+  ];
+
+  function buildMarkers() {
+    const root = $("#markers");
+    if (!root) return;
+    root.innerHTML = "";
+    markerEls = {};
+    for (const m of MARKERS) {
+      const el = document.createElement("div");
+      el.className = `marker ${m.cls}`;
+      el.dataset.marker = m.id;
+      el.innerHTML = `<span class="mdot"></span><span class="mline"></span><span class="mtag"><em>${m.label}</em><b>—</b><em>${m.unit}</em></span>`;
+      el.addEventListener("click", ev => {
+        ev.stopPropagation();
+        showToast(`${m.label} → ${m.map}`, 3000);
+      });
+      root.appendChild(el);
+      markerEls[m.id] = el;
+    }
+  }
+
+  function updateMarkerText() {
+    const e = state.env;
+    if (!e) return;
+    for (const m of MARKERS) {
+      const el = markerEls[m.id];
+      if (!el) continue;
+      const b = el.querySelector(".mtag b");
+      if (b) b.textContent = m.get(e);
+    }
+  }
+
+  const MARKER_ANCHORS = {
+    rain: [5.2, 1.2, 3.2],
+    cloud: [0, 7.5, 0],
+    uv: [0, 10.0, 0],
+    light: [0, 11.5, 0]
+  };
+
+  function updateMarkers() {
+    if (!scene || !state.labels) return;
+    const root = $("#markers");
+    if (!root) return;
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    for (const m of MARKERS) {
+      const el = markerEls[m.id];
+      if (!el) continue;
+      const p = scene.projectPoint(MARKER_ANCHORS[m.id]);
+      if (!p || !p.visible || p.x < -80 || p.x > W + 80 || p.y < -40 || p.y > H + 40) {
+        el.classList.remove("on");
+        continue;
+      }
+      el.classList.add("on");
+      el.classList.toggle("flip", p.x > W - 255);
+      el.style.left = `${p.x.toFixed(1)}px`;
+      el.style.top = `${p.y.toFixed(1)}px`;
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* clock                                                               */
+  /* ------------------------------------------------------------------ */
+  function updateClock() {
+    state.lastClock = performance.now();
+    const now = getNow();
+    const c = formatClock(now);
+    const clock = $("#clock");
+    if (clock) clock.innerHTML = `${c.hm}<span class="sec">${c.ss}</span>`;
+    const d = formatDate(now);
+    setText("date", `${d.date} / ${d.weekday}`);
+    updateRefreshLabel();
+    if (state.env) {
+      const inDay = state.env.isDay;
+      const day = $("#dayState");
+      if (day) {
+        if (!inDay) day.textContent = "夜间";
+        else day.textContent = (state.env.shortwave || 0) < 70 ? "低照度" : "白天";
+      }
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* search / geolocation                                                */
+  /* ------------------------------------------------------------------ */
+  function hideSearch() {
+    const box = $("#searchResults");
+    if (box) box.classList.remove("on");
+  }
+
+  function renderSearchResults(list, query) {
+    const box = $("#searchResults");
+    if (!box) return;
+    box.innerHTML = "";
+    if (!list.length) {
+      box.innerHTML = `<div class="sr-empty">未找到「${query.replace(/[<>&]/g, "")}」</div>`;
+      box.classList.add("on");
+      return;
+    }
+    const head = document.createElement("div");
+    head.className = "sr-h";
+    head.textContent = "选择观测点 / LOCATION";
+    box.appendChild(head);
+    for (const p of list) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "sr-item";
+      const left = document.createElement("span");
+      left.textContent = p.name;
+      const right = document.createElement("small");
+      right.textContent = [p.admin1, p.country].filter(Boolean).join(" · ");
+      b.append(left, right);
+      b.addEventListener("mousedown", ev => ev.preventDefault());
+      b.addEventListener("click", () => {
+        selectPlace(p);
+        hideSearch();
+      });
+      box.appendChild(b);
+    }
+    box.classList.add("on");
+  }
+
+  async function searchPlaces(q) {
+    const query = String(q || "").trim();
+    if (query.length < 2) {
+      hideSearch();
+      return;
+    }
+    const seq = ++searchSeq;
+    const box = $("#searchResults");
+    if (box) {
+      box.innerHTML = `<div class="sr-empty">搜索中…</div>`;
+      box.classList.add("on");
+    }
+    try {
+      const url = `${GEO}?name=${encodeURIComponent(query)}&count=6&language=zh&format=json`;
+      const j = await getJSON(url, 9000);
+      if (seq !== searchSeq) return;
+      const list = (j.results || []).filter(p => Number.isFinite(+p.latitude)).map(p => ({
+        name: p.name || query,
+        admin1: p.admin1 || "",
+        country: p.country || "",
+        latitude: +p.latitude,
+        longitude: +p.longitude,
+        timezone: p.timezone || ""
+      }));
+      renderSearchResults(list, query);
+    } catch (e) {
+      if (seq !== searchSeq) return;
+      const box2 = $("#searchResults");
+      if (box2) {
+        box2.innerHTML = `<div class="sr-empty">搜索失败，请检查网络</div>`;
+        box2.classList.add("on");
+      }
+    }
+  }
+
+  function selectPlace(p) {
+    state.place = {
+      name: p.name || "当前位置",
+      admin1: p.admin1 || "",
+      country: p.country || "",
+      latitude: num(p.latitude, state.place.latitude),
+      longitude: num(p.longitude, state.place.longitude),
+      timezone: p.timezone || state.place.timezone || "Asia/Shanghai"
+    };
+    state.formatters = null;
+    savePlace();
+    if (scene) scene.setPlace(state.place);
+    setText("placeBtn", state.place.name);
+    setText("trendZone", `${state.place.name} · 24H`);
+    state.nextRefresh = 0;
+    refreshWeather();
+    showToast(`观测点已切换 · ${state.place.name}`);
+  }
+
+  async function reverseName(lat, lon) {
+    try {
+      const j = await getJSON(`${REVERSE}?latitude=${lat}&longitude=${lon}&localityLanguage=zh`, 7000);
+      return {
+        name: j.city || j.locality || j.principalSubdivision || "当前位置",
+        admin1: j.principalSubdivision || "",
+        country: j.countryName || ""
+      };
+    } catch (e) {
+      return { name: "当前位置", admin1: "", country: "" };
+    }
+  }
+
+  function locate() {
+    if (!navigator.geolocation) {
+      showToast("当前浏览器不支持定位，请使用搜索");
+      return;
+    }
+    showToast("正在获取设备位置…", 2200);
+    navigator.geolocation.getCurrentPosition(async pos => {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      const nm = await reverseName(lat, lon);
+      selectPlace({ ...nm, latitude: lat, longitude: lon, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai" });
+    }, err => {
+      let msg = "定位失败，请使用城市搜索";
+      if (err && err.code === 1) msg = "定位权限被拒绝，请使用城市搜索";
+      if (err && err.code === 3) msg = "定位超时，请使用城市搜索";
+      showToast(msg, 4000);
+    }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 120000 });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* view / controls                                                     */
+  /* ------------------------------------------------------------------ */
+  function setView(n, silent) {
+    state.view = clamp(n, 0, 2);
+    $$(".view-btn").forEach(b => b.classList.toggle("on", +b.dataset.view === state.view));
+    if (scene) scene.setView(state.view);
+    if (!silent) {
+      const names = ["全景视角", "云层视角", "地表视角"];
+      showToast(`切换至 ${names[state.view]}`, 1200);
+    }
+  }
+
+  function toggleOrbit() {
+    state.autoOrbit = !state.autoOrbit;
+    const b = $("#orbitBtn");
+    if (b) b.classList.toggle("on", state.autoOrbit);
+    if (scene) scene.setAutoOrbit(state.autoOrbit);
+  }
+
+  function toggleLabels() {
+    state.labels = !state.labels;
+    const b = $("#labelsBtn");
+    if (b) b.classList.toggle("on", state.labels);
+    const root = $("#markers");
+    if (root) root.classList.toggle("off", !state.labels);
+    if (state.labels) updateMarkers();
+  }
+
+
+  /* ------------------------------------------------------------------ */
+  /* timeline                                                            */
+  /* ------------------------------------------------------------------ */
+  function envFromHourlyIdx(idx) {
+    const h = state.hourly;
+    if (!h || !h.time || !h.time.length) return null;
+    const i = Math.max(0, Math.min(h.time.length - 1, idx));
+    const at = (arr) => (Array.isArray(arr) ? num(arr[i], 0) : 0);
+    const code = at(h.weather_code);
+    const info = weatherInfo(code);
+    const temp = at(h.temperature_2m);
+    const precip = at(h.precipitation);
+    const cloud = clamp(at(h.cloud_cover), 0, 100);
+    const isDay = Number(at(h.is_day)) === 1;
+    return {
+      temp,
+      apparent: temp,
+      humidity: clamp(at(h.humidity), 0, 100),
+      precipitation: precip,
+      rainRate: Math.max(precip * 4, at(h.precipitation)),
+      rainNext: at(h.precipitation),
+      rainTotal24: 0,
+      dailyRain: 0,
+      cloud,
+      cloudLow: clamp(at(h.cloud_cover_low), 0, 100),
+      cloudMid: clamp(at(h.cloud_cover_mid), 0, 100),
+      cloudHigh: clamp(at(h.cloud_cover_high), 0, 100),
+      uv: Math.max(0, at(h.uv_index)),
+      uvMax: Math.max(0, at(h.uv_index)),
+      shortwave: Math.max(0, at(h.shortwave_radiation)),
+      isDay,
+      code,
+      condition: info.zh,
+      conditionEn: info.en,
+      group: info.group,
+      storm: info.group === "storm",
+      snow: info.group === "snow" || (temp <= 1.2 && precip > 0.02),
+      windSpeed: at(h.wind_speed),
+      windDir: at(h.wind_direction),
+      windGust: 0,
+      pressure: 1013,
+      visibility: 20000,
+      sunrise: "",
+      sunset: ""
+    };
+  }
+
+  function applyTimeline(idx) {
+    const env = envFromHourlyIdx(idx);
+    if (!env) return;
+    state.tlIndex = idx;
+    state.tlActive = true;
+    state.env = env;
+    if (scene) scene.setEnvironment(env);
+    renderWeatherUI();
+    // update slider label
+    const h = state.hourly;
+    if (h && h.time && h.time[idx]) {
+      const t = String(h.time[idx]);
+      const d = t.slice(5, 10).replace("-", "/");
+      const tm = t.slice(11, 16);
+      const nowIdx = state.currentIdx || Math.floor(h.time.length / 2);
+      const diff = idx - nowIdx;
+      let rel;
+      if (diff === 0) rel = "· 现在";
+      else if (diff < 0) rel = `· ${-diff}h 前`;
+      else rel = `· ${diff}h 后`;
+      setText("tlInfo", `${d} ${tm} ${rel}`);
+    }
+    const btn = $("#tlNow");
+    if (btn) btn.classList.add("active");
+  }
+
+  function resetTimeline() {
+    state.tlActive = false;
+    state.tlIndex = -1;
+    const h = state.hourly;
+    if (h && state.currentIdx != null) {
+      const slider = $("#tlSlider");
+      if (slider) slider.value = state.currentIdx;
+      // restore current-time env from cached hourly
+      const env = envFromHourlyIdx(state.currentIdx);
+      if (env) {
+        state.env = env;
+        if (scene) scene.setEnvironment(env);
+        renderWeatherUI();
+      }
+    }
+    const btn = $("#tlNow");
+    if (btn) btn.classList.remove("active");
+    setText("tlInfo", "当前实时天气");
+  }
+
+  function bindUI() {
+    buildMarkers();
+    const input = $("#cityInput");
+    if (input) {
+      input.addEventListener("input", () => {
+        clearTimeout(searchTimer);
+        const v = input.value.trim();
+        if (v.length < 2) {
+          hideSearch();
+          return;
+        }
+        searchTimer = setTimeout(() => searchPlaces(v), 420);
+      });
+      input.addEventListener("keydown", ev => {
+        if (ev.key === "Enter") {
+          clearTimeout(searchTimer);
+          searchPlaces(input.value);
+        } else if (ev.key === "Escape") {
+          hideSearch();
+          input.blur();
+        }
+      });
+    }
+    const searchBtn = $("#searchBtn");
+    if (searchBtn) searchBtn.addEventListener("click", () => {
+      if (input) {
+        if (input.value.trim().length < 2) input.focus();
+        else searchPlaces(input.value);
+      }
+    });
+    const placeBtn = $("#placeBtn");
+    if (placeBtn) placeBtn.addEventListener("click", () => {
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    });
+    const locateBtn = $("#locateBtn");
+    if (locateBtn) locateBtn.addEventListener("click", locate);
+    const orbitBtn = $("#orbitBtn");
+    if (orbitBtn) orbitBtn.addEventListener("click", toggleOrbit);
+    const labelsBtn = $("#labelsBtn");
+    if (labelsBtn) labelsBtn.addEventListener("click", toggleLabels);
+    const refreshBtn = $("#refreshBtn");
+    if (refreshBtn) refreshBtn.addEventListener("click", () => {
+      if (state.refreshing) return;
+      state.nextRefresh = 0;
+      refreshWeather();
+    });
+    $$(".view-btn").forEach(b => b.addEventListener("click", () => setView(+b.dataset.view)));
+    $$(".tabs button").forEach(b => b.addEventListener("click", () => {
+      state.tab = b.dataset.tab;
+      $$(".tabs button").forEach(x => x.classList.toggle("on", x === b));
+      drawChart();
+    }));
+    // timeline
+    const tlSlider = $("#tlSlider");
+    if (tlSlider) {
+      tlSlider.addEventListener("input", () => {
+        applyTimeline(+tlSlider.value);
+      });
+    }
+    const tlNow = $("#tlNow");
+    if (tlNow) tlNow.addEventListener("click", resetTimeline);
+    document.addEventListener("pointerdown", ev => {
+      if (!ev.target.closest(".search-wrap")) hideSearch();
+    });
+    window.addEventListener("resize", () => {
+      setTimeout(() => {
+        drawChart();
+        updateMarkers();
+      }, 100);
+    });
+    window.addEventListener("keydown", ev => {
+      if (ev.target && /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName)) return;
+      if (ev.key === " " && !ev.metaKey && !ev.ctrlKey) {
+        ev.preventDefault();
+        toggleOrbit();
+      } else if (ev.key === "l" || ev.key === "L") {
+        toggleLabels();
+      } else if (ev.key === "r" || ev.key === "R") {
+        setView(0);
+      }
+    });
+    setTimeout(() => {
+      const hint = $("#hint");
+      if (hint) hint.classList.add("gone");
+    }, 9000);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* frame loop                                                          */
+  /* ------------------------------------------------------------------ */
+  function frame(ts) {
+    const dt = lastFrame ? Math.min(0.06, (ts - lastFrame) / 1000) : 0.016;
+    lastFrame = ts;
+    const now = getNow();
+    if (scene) {
+      try {
+        scene.render(ts / 1000, dt, now);
+        if (debugOnce) document.body.dataset.render = "ok";
+      } catch (e) {
+        console.error(e);
+        if (debugOnce) document.body.dataset.render = "error";
+        if (!frame._errShown) {
+          frame._errShown = true;
+          fatal(`渲染出错：${e.message}\n\n${e.stack || ""}`);
+        }
+      }
+    }
+    if (ts - state.lastClock > 220) updateClock();
+    updateMarkers();
+    if (state.nextRefresh && Date.now() >= state.nextRefresh && !state.refreshing) {
+      state.nextRefresh = 0;
+      refreshWeather();
+    }
+    if (!debugOnce) requestAnimationFrame(frame);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* boot                                                                */
+  /* ------------------------------------------------------------------ */
+  function init() {
+    ensureFormatters();
+    if (!window.WeatherScene) {
+      fatal("渲染模块未加载：weather-scene.js 缺失。");
+      return;
+    }
+    try {
+      scene = new window.WeatherScene($("#gl"), state.place);
+      scene.setEnvironment(null);
+      scene.setView(0);
+      scene.setAutoOrbit(state.autoOrbit);
+    } catch (e) {
+      console.error(e);
+      fatal(`无法初始化 WebGL2 场景：${e.message}\n\n请使用支持 WebGL2 的 Chrome / Edge / Firefox 打开。\n\n${e.stack || ""}`);
+      return;
+    }
+    bindUI();
+    const orbitButton = $("#orbitBtn");
+    if (orbitButton) orbitButton.classList.toggle("on", state.autoOrbit);
+    if (debugOnce) {
+      const ld = $("#loading");
+      if (ld) ld.style.display = "none";
+    }
+    setView(0, true);
+    setLiveStatus("loading");
+    updateClock();
+    if (!debugOnce) {
+      requestAnimationFrame(frame);
+      refreshWeather(true);
+    } else {
+      refreshWeather(true);
+      setTimeout(() => {
+        if (scene && scene.snapEnvironment) scene.snapEnvironment();
+        updateMarkers();
+        requestAnimationFrame(frame);
+      }, 80);
+    }
+    setTimeout(() => {
+      const ld = $("#loading");
+      if (ld) ld.classList.add("gone");
+    }, 1500);
+  }
+
+  window.addEventListener("load", init, { once: true });
+})();
+
+</script>
+</body>
+</html>
