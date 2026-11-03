@@ -726,6 +726,10 @@
     sidewalk: C("#535c65"), sidewalkTop: C("#626b73"), curb: C("#7b838a"),
     facadeA: C("#35434f"), facadeB: C("#485560"), facadeC: C("#2a3845"),
     facadeD: C("#5e6062"), podium: C("#3d454d"), podiumTop: C("#515a63"),
+    stone: C("#6b665d"), stoneLight: C("#8d8579"), stoneDark: C("#45423d"),
+    concrete: C("#4b545c"), concreteTop: C("#6a7379"),
+    curtainA: C("#223b47"), curtainB: C("#29464c"), glassDark: C("#16262e"),
+    frame: C("#181f26"), awning: C("#2b3137"),
     winWarm: C("#ffba6a"), winCool: C("#9fdcff"), winPale: C("#d6ebf6"),
     neonCyan: C("#37e6ff"), neonMagenta: C("#ff5fc7"), neonAmber: C("#ffab42"),
     uvGlow: C("#c08bff"),
@@ -759,86 +763,189 @@
     return { body, lights };
   }
 
-  function addTower(paint, metal, light, detail, opt) {
+  function addTower(paint, metal, light, detail, curtain, opt) {
     const { x, z, w, d, h, style, seed } = opt;
-    const facade = [PAL.facadeA, PAL.facadeB, PAL.facadeC, PAL.facadeD][style % 4];
-    const topCol = cmul(facade, 1.18);
-    const podH = 3.1;
-    const shaftTop = CITY_BASE + h;
+    const isGlass = style === 0;
+    const isStone = style === 1 || style === 3;
+    const isDeco = style === 3;
+    const facade = isGlass ? PAL.curtainA : (isStone ? (seed % 2 ? PAL.stoneLight : PAL.stone) : PAL.concrete);
+    const trim = isStone ? PAL.stoneLight : PAL.metal;
+    const podH = 3.2;
+    const crownH = h > 27 ? (isDeco ? 4.8 : 3.2) : 1.1;
+    const shaftBase = CITY_BASE + podH;
+    const shaftTop = CITY_BASE + h - crownH;
+    const shaftH = Math.max(6, shaftTop - shaftBase);
+    const baseW = w + 2.6, baseD = d + 2.6;
+    const frontZ = z + baseD / 2;
+    const backZ = z - baseD / 2;
+    const sideX = x + baseW / 2;
+    const accent = style === 1 ? PAL.neonMagenta : (style === 3 ? PAL.neonAmber : PAL.neonCyan);
 
-    /* podium / street retail base */
-    paint.box(x, CITY_BASE + podH / 2, z, w + 2.4, podH, d + 2.4, PAL.podium, 0, PAL.podiumTop);
-    metal.box(x, CITY_BASE + podH + 0.06, z, w + 2.5, 0.13, d + 2.5, PAL.metalDark);
+    /* plinth, podium, stone base */
+    paint.box(x, CITY_BASE + 0.16, z, w + 3.4, 0.32, d + 3.4, PAL.stoneDark);
+    paint.box(x, CITY_BASE + podH / 2, z, baseW, podH, baseD, PAL.podium, 0, PAL.podiumTop);
+    paint.box(x, CITY_BASE + 0.38, z, baseW + 0.06, 0.44, baseD + 0.06, PAL.stoneDark);
+    metal.box(x, CITY_BASE + podH + 0.06, z, baseW + 0.2, 0.12, baseD + 0.2, PAL.metalDark);
+    detail.box(x, CITY_BASE + 2.88, z, baseW + 0.08, 0.16, baseD + 0.08, trim);
+
+    /* warm storefronts break up the podium */
+    const shopW = baseW / 3;
     for (let k = 0; k < 3; k++) {
-      const sx = x - (w + 2.4) / 2 + (k + 0.5) * (w + 2.4) / 3;
-      light.box(sx, CITY_BASE + 1.45, z + (d + 2.4) / 2 + 0.012, (w + 2.4) / 3 * 0.62, 0.42, 0.025, PAL.winWarm);
+      const sx = x - baseW / 2 + (k + 0.5) * shopW;
+      const sfW = shopW * 0.78;
+      curtain.box(sx, CITY_BASE + 1.52, frontZ + 0.035, sfW, 1.86, 0.05, PAL.glassDark);
+      light.box(sx, CITY_BASE + 1.48, frontZ + 0.07, sfW * 0.68, 0.96, 0.02, k === 1 ? PAL.winPale : PAL.winWarm);
+      metal.box(sx - sfW / 2 - 0.035, CITY_BASE + 1.55, frontZ + 0.08, 0.06, 1.98, 0.08, PAL.frame);
+      metal.box(sx + sfW / 2 + 0.035, CITY_BASE + 1.55, frontZ + 0.08, 0.06, 1.98, 0.08, PAL.frame);
+      metal.box(sx, CITY_BASE + 2.50, frontZ + 0.08, sfW + 0.10, 0.07, 0.08, PAL.frame);
+      metal.box(sx, CITY_BASE + 2.72, frontZ + 0.34, sfW + 0.22, 0.07, 0.72, PAL.awning);
+      light.box(sx, CITY_BASE + 2.94, frontZ + 0.52, sfW * 0.52, 0.09, 0.03, accent);
     }
+    /* side storefronts */
+    for (let k = 0; k < 2; k++) {
+      const sz = z - baseD / 2 + (k + 0.5) * baseD / 2;
+      curtain.box(sideX + 0.035, CITY_BASE + 1.52, sz, 0.05, 1.86, baseD / 2 * 0.68, PAL.glassDark);
+      light.box(sideX + 0.07, CITY_BASE + 1.48, sz, 0.02, 0.86, baseD / 2 * 0.46, PAL.winWarm);
+      metal.box(sideX + 0.08, CITY_BASE + 2.72, sz, 0.66, 0.07, baseD / 2 * 0.78, PAL.awning);
+    }
+    /* entrance canopy and doors */
+    curtain.box(x, CITY_BASE + 1.30, frontZ + 0.05, 1.05, 2.35, 0.04, PAL.glassDark);
+    metal.box(x, CITY_BASE + 2.53, frontZ + 0.30, 1.55, 0.10, 0.62, PAL.metalDark);
+    light.box(x, CITY_BASE + 1.92, frontZ + 0.09, 0.10, 0.72, 0.02, PAL.winPale);
+    light.box(x, CITY_BASE + 2.08, frontZ + 0.48, 0.72, 0.06, 0.03, PAL.winWarm);
 
     /* main shaft */
-    const shaftH = h - podH;
-    paint.box(x, CITY_BASE + podH + shaftH / 2, z, w, shaftH, d, facade, 0, topCol);
-    const yr = (CITY_BASE + podH + shaftTop) / 2;
-    for (const sx of [-1, 1]) {
-      for (const sz of [-1, 1]) {
-        metal.box(x + sx * (w / 2 - 0.04), yr, z + sz * (d / 2 - 0.04), 0.09, shaftH, 0.09, PAL.metalDark);
+    if (isGlass) {
+      curtain.box(x, shaftBase + shaftH / 2, z, w, shaftH, d, seed % 2 ? PAL.curtainB : PAL.curtainA);
+      const floors = Math.max(6, Math.floor(shaftH / 2.75));
+      const fstep = shaftH / floors;
+      const cols = Math.max(3, Math.min(6, Math.round(w / 1.55)));
+      for (let f = 0; f < floors; f++) {
+        const yb = shaftBase + 0.5 + f * fstep;
+        metal.box(x, yb, z + d / 2 + 0.025, w + 0.04, 0.09, 0.06, PAL.metalDark);
+        metal.box(x, yb, z - d / 2 - 0.025, w + 0.04, 0.09, 0.06, PAL.metalDark);
+        metal.box(x + w / 2 + 0.025, yb, z, 0.06, 0.09, d + 0.04, PAL.metalDark);
+        metal.box(x - w / 2 - 0.025, yb, z, 0.06, 0.09, d + 0.04, PAL.metalDark);
+        for (let c = 0; c < cols; c++) {
+          if (hash2(seed * 9 + f * 0.73, c * 2.1) < 0.64) continue;
+          const off = -w / 2 + (c + 0.5) * w / cols;
+          const offz = -d / 2 + (c + 0.5) * d / cols;
+          const cc = hash2(seed + f, c * 1.7) > 0.58 ? PAL.winWarm : PAL.winCool;
+          light.box(x + off, yb - fstep * 0.26, z + d / 2 + 0.045, w / cols * 0.62, fstep * 0.55, 0.02, cc);
+          light.box(x + off, yb - fstep * 0.26, z - d / 2 - 0.045, w / cols * 0.62, fstep * 0.55, 0.02, cc);
+          light.box(x + w / 2 + 0.045, yb - fstep * 0.26, z + offz, 0.02, fstep * 0.55, d / cols * 0.62, cc);
+          light.box(x - w / 2 - 0.045, yb - fstep * 0.26, z + offz, 0.02, fstep * 0.55, d / cols * 0.62, cc);
+        }
       }
-    }
-    /* vertical window strips on all faces, with occasional dark bays */
-    const cols = Math.max(3, Math.min(6, Math.round(w / 1.45)));
-    const floors = Math.max(5, Math.floor((h - 5) / 2.25));
-    for (let f = 0; f < floors; f++) {
-      const yy = CITY_BASE + podH + 1.2 + f * ((shaftH - 2.3) / Math.max(1, floors - 1));
-      for (let c = 0; c < cols; c++) {
-        if (hash2(seed * 11 + f * 1.7, c * 3.1) < 0.05) continue;
-        const off = -w / 2 + (c + 0.5) * w / cols;
-        const offz = -d / 2 + (c + 0.5) * d / cols;
-        const winH = Math.min(0.64, (shaftH / floors) * 0.48);
-        const winW = Math.min(0.56, w / cols * 0.48);
-        const cc = hash2(seed + f * 0.31, c * 0.77) > 0.55 ? PAL.winCool : PAL.winWarm;
-        light.box(x + off, yy, z + d / 2 + 0.012, winW, winH, 0.025, cc);
-        light.box(x + off, yy, z - d / 2 - 0.012, winW, winH, 0.025, cc);
-        light.box(x + w / 2 + 0.012, yy, z + offz, 0.025, winH, winW, cc);
-        light.box(x - w / 2 - 0.012, yy, z + offz, 0.025, winH, winW, cc);
+      for (let c = 1; c < cols; c++) {
+        const off = -w / 2 + c * w / cols;
+        metal.box(x + off, shaftBase + shaftH / 2, z + d / 2 + 0.035, 0.05, shaftH, 0.04, PAL.metal);
+        metal.box(x + off, shaftBase + shaftH / 2, z - d / 2 - 0.035, 0.05, shaftH, 0.04, PAL.metal);
       }
-    }
-    /* floor bands / mullions catch the weather light */
-    for (let f = 0; f < floors; f += 1) {
-      const yb = CITY_BASE + podH + 1.2 + (f + 0.55) * ((shaftH - 2.3) / Math.max(1, floors - 1));
-      metal.box(x, yb, z + d / 2 + 0.018, w * 0.96, 0.045, 0.04, cmul(PAL.metalDark, 0.9));
-      metal.box(x, yb, z - d / 2 - 0.018, w * 0.96, 0.045, 0.04, cmul(PAL.metalDark, 0.9));
-      metal.box(x + w / 2 + 0.018, yb, z, 0.04, 0.045, d * 0.96, cmul(PAL.metalDark, 0.9));
-      metal.box(x - w / 2 - 0.018, yb, z, 0.04, 0.045, d * 0.96, cmul(PAL.metalDark, 0.9));
-    }
-
-    /* setback crown or parapet */
-    let crownY = shaftTop;
-    let crownW = w * 0.84, crownD = d * 0.84;
-    if (h > 26) {
-      const cw = w * 0.62, cd = d * 0.62, ch = Math.min(5.0, h * 0.12);
-      paint.box(x, shaftTop + ch / 2, z, cw, ch, cd, cmul(facade, 1.10), 0, topCol);
-      metal.box(x, shaftTop + ch + 0.05, z, cw * 0.9, 0.14, cd * 0.9, PAL.metalDark);
-      crownY = shaftTop + ch;
-      crownW = cw; crownD = cd;
+      for (let c = 1; c < cols; c++) {
+        const offz = -d / 2 + c * d / cols;
+        metal.box(x + w / 2 + 0.035, shaftBase + shaftH / 2, z + offz, 0.04, shaftH, 0.05, PAL.metal);
+        metal.box(x - w / 2 - 0.035, shaftBase + shaftH / 2, z + offz, 0.04, shaftH, 0.05, PAL.metal);
+      }
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+        metal.box(x + sx * (w / 2 - 0.02), shaftBase + shaftH / 2, z + sz * (d / 2 - 0.02), 0.14, shaftH, 0.14, PAL.metalDark);
+      }
     } else {
-      metal.box(x, shaftTop + 0.15, z, w * 0.84, 0.22, d * 0.84, PAL.metalDark);
+      paint.box(x, shaftBase + shaftH / 2, z, w, shaftH, d, facade, 0, cmul(facade, 1.14));
+      /* corner piers */
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+        paint.box(x + sx * (w / 2 - 0.05), shaftBase + shaftH / 2, z + sz * (d / 2 - 0.05), 0.24, shaftH, 0.24, trim);
+      }
+      const cols = Math.max(3, Math.min(5, Math.round(w / 1.6)));
+      const floors = Math.max(6, Math.floor((shaftH - 1.4) / 2.45));
+      const fstep = (shaftH - 1.4) / floors;
+      /* vertical pilasters */
+      for (let c = 1; c < cols; c++) {
+        const off = -w / 2 + c * w / cols;
+        paint.box(x + off, shaftBase + shaftH / 2, z + d / 2 + 0.045, 0.18, shaftH, 0.11, trim);
+        paint.box(x + off, shaftBase + shaftH / 2, z - d / 2 - 0.045, 0.18, shaftH, 0.11, trim);
+        if (isDeco) {
+          paint.box(x + w / 2 + 0.045, shaftBase + shaftH / 2, z - d / 2 + c * d / cols, 0.11, shaftH, 0.18, trim);
+          paint.box(x - w / 2 - 0.045, shaftBase + shaftH / 2, z - d / 2 + c * d / cols, 0.11, shaftH, 0.18, trim);
+        }
+      }
+      for (let f = 0; f < floors; f++) {
+        const yy = shaftBase + 1.0 + f * fstep;
+        if (f % 3 === 0) {
+          metal.box(x, yy - fstep * 0.47, z + d / 2 + 0.05, w + 0.10, 0.10, 0.08, trim);
+          metal.box(x, yy - fstep * 0.47, z - d / 2 - 0.05, w + 0.10, 0.10, 0.08, trim);
+          metal.box(x + w / 2 + 0.05, yy - fstep * 0.47, z, 0.08, 0.10, d + 0.10, trim);
+          metal.box(x - w / 2 - 0.05, yy - fstep * 0.47, z, 0.08, 0.10, d + 0.10, trim);
+        }
+        for (let c = 0; c < cols; c++) {
+          const off = -w / 2 + (c + 0.5) * w / cols;
+          const offz = -d / 2 + (c + 0.5) * d / cols;
+          const winW = Math.min(0.78, w / cols * 0.52);
+          const winH = Math.min(1.32, fstep * 0.56);
+          const lit = hash2(seed * 13 + f * 0.91, c * 1.77) > 0.38;
+          const cc = hash2(seed + f * 0.7, c * 2.3) > 0.55 ? PAL.winWarm : PAL.winCool;
+          const colsList = 0;
+          const faces = [
+            [0, 1, x + off, z + d / 2, winW, 0.05, 0.035],
+            [0, -1, x + off, z - d / 2, winW, 0.05, 0.035],
+            [1, 0, x + w / 2, z + offz, 0.05, winW, 0.035],
+            [-1, 0, x - w / 2, z + offz, 0.05, winW, 0.035]
+          ];
+          for (const F of faces) {
+            const nx = F[0], nz = F[1], cxx = F[2], czz = F[3], ww = F[4], dd = F[5], ox = F[6];
+            const sx = nx === 0 ? winW + 0.14 : 0.06;
+            const sz = nz === 0 ? winW + 0.14 : 0.06;
+            metal.box(cxx + nx * 0.018, yy, czz + nz * 0.018, sx, winH + 0.14, sz, PAL.frame);
+            const gx = nx === 0 ? winW : 0.025;
+            const gz = nz === 0 ? winW : 0.025;
+            curtain.box(cxx + nx * ox + nx * 0.012, yy, czz + nz * ox + nz * 0.012, gx, winH, gz, PAL.glassDark);
+            if (lit) {
+              light.box(cxx + nx * ox * 1.6, yy, czz + nz * ox * 1.6,
+                nx === 0 ? winW * 0.78 : 0.012, winH * 0.82, nz === 0 ? winW * 0.78 : 0.012, cc);
+            }
+            const sillW = nx === 0 ? winW + 0.22 : 0.16;
+            const sillD = nz === 0 ? winW + 0.22 : 0.16;
+            detail.box(cxx + nx * 0.10, yy - winH / 2 - 0.045, czz + nz * 0.10, sillW, 0.07, sillD, trim);
+          }
+        }
+        /* occasional balcony on the front and east face */
+        if ((f + seed) % 4 === 0) {
+          const balY = yy - fstep * 0.48;
+          const bw = w * 0.30;
+          metal.box(x + w * 0.16, balY, z + d / 2 + 0.30, bw, 0.08, 0.56, trim);
+          for (let r = -2; r <= 2; r++) {
+            metal.box(x + w * 0.16 + r * bw * 0.11, balY + 0.28, z + d / 2 + 0.56, 0.035, 0.52, 0.035, PAL.metal);
+          }
+          metal.box(x + w * 0.16, balY + 0.53, z + d / 2 + 0.56, bw, 0.045, 0.045, PAL.metal);
+        }
+      }
     }
-    detail.box(x - w * 0.18, crownY + 0.65, z + d * 0.10, 1.1, 0.68, 1.0, PAL.metalDark, 0.14);
-    detail.box(x + w * 0.22, crownY + 0.55, z - d * 0.12, 0.8, 0.45, 0.8, PAL.metal);
-    metal.cyl(x + w * 0.30, crownY + 0.2, z - d * 0.22, 0.035, 3.6, 6, PAL.metalLight);
-    light.sphere(x + w * 0.30, crownY + 3.85, z - d * 0.22, 0.075, PAL.cityRed, 8, 5);
 
-    /* sign / accent: always readable against the night sky */
-    const accent = style === 1 ? PAL.neonMagenta : (style === 2 ? PAL.neonAmber : PAL.neonCyan);
-    if (h > 20) {
-      light.box(x, crownY + 0.055, z + crownD * 0.48, crownW * 0.94, 0.04, 0.045, accent);
-      light.box(x, crownY + 0.055, z - crownD * 0.48, crownW * 0.94, 0.04, 0.045, accent);
-      light.box(x + crownW * 0.48, crownY + 0.055, z, 0.045, 0.04, crownD * 0.94, accent);
-      light.box(x - crownW * 0.48, crownY + 0.055, z, 0.045, 0.04, crownD * 0.94, accent);
+    /* articulated crown, parapet and roof machinery */
+    const crownW = w * (isDeco ? 0.70 : 0.82);
+    const crownD = d * (isDeco ? 0.70 : 0.82);
+    const crownBase = CITY_BASE + h - crownH;
+    paint.box(x, crownBase + crownH / 2, z, crownW, crownH, crownD, cmul(facade, 1.08), 0, cmul(facade, 1.2));
+    paint.box(x, crownBase + crownH + 0.12, z, crownW + 0.18, 0.22, crownD + 0.18, cmul(trim, 1.03));
+    for (const sx of [-1, 1]) {
+      paint.box(x + sx * crownW / 2, crownBase + crownH + 0.42, z, 0.16, 0.44, crownD, trim);
+      paint.box(x, crownBase + crownH + 0.42, z + sx * crownD / 2, crownW, 0.44, 0.16, trim);
     }
-    light.box(x + w / 2 + 0.045, CITY_BASE + podH + shaftH * 0.58, z + d / 2 + 0.045, 0.10, shaftH * 0.42, 0.10, accent);
-    if (h > 23) {
-      light.box(x, CITY_BASE + h * 0.72, z + d / 2 + 0.055, w * 0.62, 0.38, 0.05, accent);
+    if (isDeco) {
+      paint.box(x, crownBase + crownH + 0.9, z, crownW * 0.62, 1.1, crownD * 0.62, cmul(facade, 1.16));
+      paint.box(x, crownBase + crownH + 1.45, z, crownW * 0.40, 0.5, crownD * 0.40, trim);
     }
+    detail.box(x - w * 0.16, crownBase + crownH + 0.68, z + d * 0.10, 1.25, 0.78, 1.05, PAL.metalDark);
+    detail.box(x + w * 0.18, crownBase + crownH + 0.55, z - d * 0.12, 0.82, 0.55, 0.82, PAL.metal);
+    for (let k = 0; k < 3; k++) {
+      metal.cyl(x - w * 0.22 + k * 0.34, crownBase + crownH + 0.22, z - d * 0.20, 0.10, 0.55, 8, PAL.metalDark);
+    }
+    metal.cyl(x + w * 0.26, crownBase + crownH + 0.22, z - d * 0.24, 0.045, 3.6, 7, PAL.metal);
+    light.sphere(x + w * 0.26, crownBase + crownH + 3.90, z - d * 0.24, 0.075, PAL.cityRed, 8, 5);
+
+    /* restrained signage: podium sign and one vertical blade */
+    light.box(x + w / 2 + 0.06, shaftBase + 4.8, z + d / 2 + 0.06, 0.10, 3.2, 0.10, accent);
+    light.box(x, CITY_BASE + h * 0.74, z + d / 2 + 0.06, w * 0.56, 0.30, 0.04, accent);
   }
 
   function addDistantBlock(paint, metal, light, x, z, w, d, h, seed) {
@@ -862,6 +969,7 @@
     const paint = new MeshBuilder();
     const metal = new MeshBuilder();
     const detail = new MeshBuilder();
+    const curtain = new MeshBuilder();
     const water = new MeshBuilder();
     const light = new MeshBuilder();
     const uv = new MeshBuilder();
@@ -902,14 +1010,14 @@
     const towers = [
       { x: -11, z: -15, w: 7.6, d: 7.4, h: 41, style: 0, seed: 1 },
       { x: 8.5, z: -18, w: 6.4, d: 6.4, h: 33, style: 1, seed: 2 },
-      { x: 18, z: -9, w: 5.8, d: 5.8, h: 24, style: 2, seed: 3 },
+      { x: 18, z: -9, w: 5.8, d: 5.8, h: 24, style: 3, seed: 3 },
       { x: -20, z: -7, w: 5.4, d: 5.4, h: 21, style: 1, seed: 4 },
       { x: -7, z: -24, w: 5.8, d: 5.8, h: 27, style: 2, seed: 5 },
       { x: -19, z: -20, w: 4.8, d: 5.0, h: 16, style: 0, seed: 6 },
       { x: 17, z: -21, w: 5.2, d: 5.2, h: 19, style: 0, seed: 7 },
       { x: -12, z: 9, w: 6.4, d: 6.4, h: 25, style: 2, seed: 8 },
     ];
-    for (const t of towers) addTower(paint, metal, light, detail, t);
+    for (const t of towers) addTower(paint, metal, light, detail, curtain, t);
     /* UV halo: only visible when the UV index is meaningful */
     uv.torus(-11.0, 43.6, -15.0, 5.8, 0.055, 56, 6, PAL.uvGlow);
     uv.torus(-11.0, 43.6, -15.0, 6.8, 0.030, 56, 6, PAL.uvGlow);
@@ -943,6 +1051,56 @@
       [-17.0, 0.022, -1.5, 0.76], [1.4, 0.022, 17.0, 0.7], [-1.8, 0.022, -17.5, 0.74]
     ];
     for (const p of puddles) water.disc(p[0], p[1], p[2], p[3], 26, PAL.water, true);
+
+    /* ---- street surface detail: pavers, drains, covers, bollards ---- */
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        for (let k = 0; k < 8; k++) {
+          const d = 6.4 + k * 2.6;
+          detail.box(sx * (8.2 + d * 0.5), 0.185, sz * d, d * 0.75, 0.007, 0.032, cmul(PAL.sidewalkTop, 0.74));
+          detail.box(sx * d, 0.185, sz * (8.2 + d * 0.5), 0.032, 0.007, d * 0.75, cmul(PAL.sidewalkTop, 0.74));
+        }
+      }
+    }
+    for (const [mx, mz] of [[8.6, 1.3], [-3.4, 10.1], [12.2, -3.4], [-12.8, -10.6], [2.5, -18.4]]) {
+      detail.cyl(mx, 0.013, mz, 0.43, 0.025, 18, PAL.metalDark);
+      metal.cyl(mx, 0.018, mz, 0.31, 0.014, 16, cmul(PAL.metal, 0.6));
+    }
+    for (const s of [-1, 1]) {
+      for (const z of [-10.5, -8.2, 8.2, 10.5]) {
+        const x = s * 4.12;
+        detail.box(x, 0.025, z, 0.36, 0.025, 0.62, PAL.metalDark);
+        for (let k = -1; k <= 1; k++) metal.box(x, 0.033, z + k * 0.15, 0.30, 0.008, 0.035, PAL.metal);
+      }
+    }
+    for (let k = 0; k < 7; k++) {
+      const x = 10.6 + k * 1.35, z = 14.2;
+      metal.cyl(x, 0.18, z, 0.08, 0.76, 8, PAL.metalDark);
+      metal.cyl(x, 0.90, z, 0.10, 0.06, 8, PAL.metalLight);
+    }
+    for (const [bx, bz] of [[18.8, 13.4], [21.2, 13.4]]) {
+      metal.cyl(bx, 0.18, bz, 0.24, 0.52, 10, PAL.metalDark);
+      metal.cyl(bx, 0.66, bz, 0.20, 0.06, 10, PAL.metal);
+    }
+    /* small bus shelter on the open plaza */
+    for (const dx of [-1.45, 1.45]) {
+      metal.cyl(21.2 + dx, 0.18, 15.8, 0.055, 2.84, 7, PAL.metalDark);
+    }
+    metal.box(21.2, 2.88, 15.8, 3.25, 0.10, 1.55, PAL.metalDark);
+    curtain.box(21.2, 1.55, 16.52, 3.15, 2.55, 0.045, PAL.glassDark);
+    metal.box(21.2, 0.58, 15.95, 2.55, 0.10, 0.52, PAL.metal);
+    light.box(21.2, 1.88, 16.55, 0.95, 0.42, 0.025, PAL.winWarm);
+    /* street name sign and a pair of bollards by the crossing */
+    metal.cyl(6.15, 0.18, -6.15, 0.045, 3.1, 6, PAL.metalDark);
+    metal.box(6.15, 2.80, -6.15, 1.15, 0.24, 0.06, PAL.winCool);
+    metal.box(6.15, 2.50, -6.15, 0.82, 0.18, 0.06, PAL.winWarm);
+    for (const [bx, bz] of [[-4.55, 6.2], [4.55, 6.2], [-4.55, -6.2], [4.55, -6.2]]) {
+      metal.cyl(bx, 0.18, bz, 0.07, 0.68, 8, PAL.metalDark);
+    }
+    /* asphalt patches and tyre polish */
+    for (const [px, pz, pw, pd] of [[7.5, 2.0, 2.4, 0.7], [-6.8, -2.3, 1.8, 0.55], [1.8, 13.5, 0.45, 2.8], [-2.4, -15.0, 0.5, 2.4]]) {
+      detail.box(px, 0.008, pz, pw, 0.008, pd, cmul(PAL.asphaltTop, 0.72));
+    }
 
     /* ---- four working street lamps (actual point lights) ---- */
     const lampPositions = [];
@@ -1048,13 +1206,14 @@
 
     return {
       batches: [
-        { name: "terrain", mesh: terrain, mat: { rough: 0.78, metal: 0.10, emissive: 0, alpha: 1 } },
-        { name: "rock", mesh: rock, mat: { rough: 0.86, metal: 0.02, emissive: 0, alpha: 1 } },
-        { name: "paint", mesh: paint, mat: { rough: 0.62, metal: 0.16, emissive: 0, alpha: 1 } },
-        { name: "metal", mesh: metal, mat: { rough: 0.38, metal: 0.68, emissive: 0, alpha: 1 } },
-        { name: "detail", mesh: detail, mat: { rough: 0.72, metal: 0.15, emissive: 0, alpha: 1 } },
-        { name: "water", mesh: water, mat: { rough: 0.06, metal: 0.40, emissive: 0, alpha: 1 } },
-        { name: "light", mesh: light, mat: { rough: 0.28, metal: 0.0, emissive: 2.4, alpha: 1 } },
+        { name: "terrain", mesh: terrain, mat: { rough: 0.78, metal: 0.10, emissive: 0, alpha: 1, detail: 0.15, reflect: 0.02 } },
+        { name: "rock", mesh: rock, mat: { rough: 0.86, metal: 0.02, emissive: 0, alpha: 1, detail: 0.32, reflect: 0.02 } },
+        { name: "paint", mesh: paint, mat: { rough: 0.62, metal: 0.16, emissive: 0, alpha: 1, detail: 0.72, reflect: 0.04 } },
+        { name: "curtain", mesh: curtain, mat: { rough: 0.18, metal: 0.48, emissive: 0, alpha: 1, detail: 0.85, reflect: 0.60 } },
+        { name: "metal", mesh: metal, mat: { rough: 0.38, metal: 0.68, emissive: 0, alpha: 1, detail: 0.30, reflect: 0.18 } },
+        { name: "detail", mesh: detail, mat: { rough: 0.72, metal: 0.15, emissive: 0, alpha: 1, detail: 0.55, reflect: 0.04 } },
+        { name: "water", mesh: water, mat: { rough: 0.06, metal: 0.40, emissive: 0, alpha: 1, detail: 0, reflect: 0 } },
+        { name: "light", mesh: light, mat: { rough: 0.22, metal: 0.0, emissive: 2.4, alpha: 1, detail: 0, reflect: 0.08 } },
         { name: "uv", mesh: uv, mat: { rough: 0.2, metal: 0.0, emissive: 0, alpha: 1 } },
         ...signalBatches,
         ...carBatches
@@ -1283,6 +1442,9 @@ uniform float uRough;
 uniform float uMetal;
 uniform float uAlpha;
 uniform float uDay;
+uniform float uDetail;
+uniform float uReflect;
+uniform float uWindowTint;
 uniform int uLampCount;
 uniform vec3 uLampPos[4];
 uniform vec3 uLampColor[4];
@@ -1291,6 +1453,21 @@ uniform sampler2DShadow uShadow;
 uniform mat4 uLightVP;
 uniform float uShadowOn;
 out vec4 outColor;
+
+float hash21c(vec2 p) {
+  p = fract(p * vec2(127.1, 311.7));
+  p += dot(p, p + 34.23);
+  return fract(p.x * p.y);
+}
+float vnoise2(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash21c(i);
+  float b = hash21c(i + vec2(1.0, 0.0));
+  float c = hash21c(i + vec2(0.0, 1.0));
+  float d = hash21c(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
 
 float shadowAt(vec3 p) {
   vec4 lp = uLightVP * vec4(p, 1.0);
@@ -1317,18 +1494,35 @@ void main() {
     N = normalize(vec3(w1 * 0.045, 1.0, w2 * 0.035));
   }
 
+  vec3 an = abs(N);
+  vec2 fuv = an.y > 0.55 ? vWorld.xz : (an.x > 0.55 ? vWorld.zy : vWorld.xy);
+  float grain = vnoise2(fuv * 2.9 + vWorld.y * 0.41);
+  vec2 panel = vec2(1.85, 1.0);
+  vec2 cell = abs(fract(fuv / panel + 0.5) - 0.5);
+  vec2 aa = max(fwidth(fuv) / panel, vec2(0.0015));
+  float seam = 1.0 - smoothstep(0.0, 0.045 + max(aa.x, aa.y), min(cell.x, cell.y));
+  float detailMask = clamp(uDetail, 0.0, 1.0);
+  vec3 base = vC * (0.93 + 0.14 * grain);
+  base *= 1.0 - seam * 0.115 * detailMask;
+  float winDay = uWindowTint * clamp(uDay, 0.0, 1.0) * (1.0 - smoothstep(0.45, 1.8, uEmissive));
+  base = mix(base, vec3(0.19, 0.26, 0.32), winDay * 0.44);
+  base *= mix(1.0, 0.78, winDay);
+
   float ndl = max(dot(N, uSunDir), 0.0);
   float sh = uShadowOn > 0.5 ? shadowAt(vWorld + N * 0.035) : 1.0;
   vec3 light = uSunColor * ndl * sh;
   vec3 amb = mix(uGroundAmb, uSkyAmb, clamp(N.y * 0.5 + 0.5, 0.0, 1.0));
-  vec3 col = vC * (amb + light);
-  col += vC * vec3(0.20, 0.22, 0.26) * uDay * (0.55 + 0.45 * max(N.y, 0.0));
-  col += vC * uMoonColor * max(N.y, 0.0) * 0.3;
+  vec3 col = base * (amb + light);
+  col += base * vec3(0.20, 0.22, 0.26) * uDay * (0.55 + 0.45 * max(N.y, 0.0));
+  col += base * uMoonColor * max(N.y, 0.0) * 0.3;
 
   float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
   col += uSkyAmb * fres * 0.055;
   vec3 rimTint = mix(vec3(0.13, 0.18, 0.28), uSkyAmb * 2.2, 0.45);
   col += rimTint * fres * 0.075;
+  vec3 reflDir = reflect(-V, N);
+  vec3 reflCol = mix(uSkyAmb * 1.8, uFogColor, 0.52) + uSunColor * pow(max(dot(reflDir, uSunDir), 0.0), 6.0) * 0.18;
+  col = mix(col, reflCol, clamp(uReflect * (0.18 + 0.56 * fres), 0.0, 0.68));
 
   for (int i = 0; i < 4; i++) {
     if (i >= uLampCount) break;
@@ -1336,7 +1530,7 @@ void main() {
     float dd = dot(d, d);
     float att = 1.0 / (1.0 + dd * 0.18);
     float nl = max(dot(N, normalize(d)), 0.0);
-    col += vC * uLampColor[i] * uLampPower[i] * att * (0.16 + 0.84 * nl);
+    col += base * uLampColor[i] * uLampPower[i] * att * (0.16 + 0.84 * nl);
   }
 
   float wetMask = uWet * (1.0 - smoothstep(0.15, 0.95, N.y));
@@ -1355,7 +1549,7 @@ void main() {
     col += uSkyAmb * 0.07;
   }
 
-  col += vC * uEmissive;
+  col += base * uEmissive;
 
   if (uSnow > 0.001) {
     vec3 snowLit = vec3(0.52, 0.57, 0.60) * (amb * 2.4 + light * 0.9);
@@ -1796,7 +1990,7 @@ void main(){
     this.U = {
       scene: uniformMap(gl, this.P.scene, [
         "uVP", "uModel", "uTime", "uWater", "uCamPos", "uSunDir", "uSunColor", "uSkyAmb", "uGroundAmb",
-        "uFogColor", "uMoonColor", "uFogDen", "uWet", "uSnow", "uEmissive", "uRough", "uMetal", "uAlpha", "uDay",
+        "uFogColor", "uMoonColor", "uFogDen", "uWet", "uSnow", "uEmissive", "uRough", "uMetal", "uAlpha", "uDay", "uDetail", "uReflect", "uWindowTint",
         "uLampCount", "uLampPos[0]", "uLampColor[0]", "uLampPower[0]", "uShadow", "uLightVP", "uShadowOn"
       ]),
       shadow: uniformMap(gl, this.P.shadow, ["uLightVP"]),
@@ -2413,6 +2607,9 @@ void main(){
     gl.uniform1f(U.uMetal, m.metal || 0);
     gl.uniform1f(U.uAlpha, m.alpha != null ? m.alpha : 1);
     gl.uniform1f(U.uWater, water ? 1 : 0);
+    gl.uniform1f(U.uDetail, m.detail != null ? m.detail : 0);
+    gl.uniform1f(U.uReflect, m.reflect != null ? m.reflect : 0);
+    gl.uniform1f(U.uWindowTint, batch.name === "light" ? 1 : 0);
     const model = batch.car != null && this.carModels && this.carModels[batch.car]
       ? this.carModels[batch.car] : M_IDENT;
     gl.uniformMatrix4fv(U.uModel, false, model);
