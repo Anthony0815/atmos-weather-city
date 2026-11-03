@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>ATMOS° · 城市实时天气三维映射</title>
+<title>ATMOS° · 实时天气三维映射</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   :root{
@@ -279,22 +279,6 @@
   @media (prefers-reduced-motion:reduce){
     *{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
   }
-
-  /* ---------------- timeline ---------------- */
-  .timeline-wrap{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
-  .timeline-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
-  .timeline-label{font-family:var(--mono);font-size:8px;letter-spacing:.14em;color:#9ab0c0}
-  .timeline-now{font-family:var(--mono);font-size:8px;letter-spacing:.1em;padding:3px 9px;border:1px solid rgba(111,211,255,.35);border-radius:5px;color:var(--rain);background:rgba(111,211,255,.08);cursor:pointer;transition:.2s}
-  .timeline-now:hover{background:rgba(111,211,255,.18)}
-  .timeline-now.active{background:rgba(111,211,255,.22);border-color:var(--rain)}
-  input[type=range].tl{width:100%;height:18px;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer;display:block}
-  input[type=range].tl::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,rgba(185,149,255,.35),rgba(111,211,255,.35) 40%,rgba(111,211,255,.5) 50%,rgba(111,211,255,.35) 60%,rgba(255,196,107,.35))}
-  input[type=range].tl::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#eaf3f9;margin-top:-5px;border:2px solid var(--rain);box-shadow:0 0 10px rgba(111,211,255,.6);transition:box-shadow .2s}
-  input[type=range].tl::-webkit-slider-thumb:hover{box-shadow:0 0 16px rgba(111,211,255,.9)}
-  input[type=range].tl::-moz-range-track{height:4px;border-radius:2px;background:linear-gradient(90deg,rgba(185,149,255,.35),rgba(111,211,255,.35) 40%,rgba(111,211,255,.5) 50%,rgba(111,211,255,.35) 60%,rgba(255,196,107,.35))}
-  input[type=range].tl::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#eaf3f9;border:2px solid var(--rain);box-shadow:0 0 10px rgba(111,211,255,.6)}
-  .timeline-marks{display:flex;justify-content:space-between;margin-top:4px;font-family:var(--mono);font-size:6.5px;letter-spacing:.08em;color:#5f788a}
-  .timeline-info{font-family:var(--mono);font-size:8px;letter-spacing:.08em;color:#b8cddd;margin-top:6px;text-align:center;min-height:12px}
 </style>
 </head>
 <body>
@@ -312,7 +296,7 @@
   <header class="top">
     <div class="brand">
       <div class="brand-mark">ATMOS<span>°</span> / WEATHER ENGINE</div>
-      <h1>城市实时天气 · 三维映射</h1>
+      <h1>实时天气 · 三维映射</h1>
       <p>LIVE WEATHER, RENDERED IN REAL TIME</p>
     </div>
     <div class="top-right">
@@ -396,17 +380,6 @@
       <div class="key"><i class="cloud"></i><span>云量 → 云层体积 / 遮蔽</span></div>
       <div class="key"><i class="uv"></i><span>紫外线 → 日晕光晕</span></div>
       <div class="key"><i class="light"></i><span>光照 → 主光 / 空气通透</span></div>
-    </div>
-    <div class="timeline-wrap">
-      <div class="timeline-head">
-        <span class="timeline-label">时间轴 / TIMELINE</span>
-        <button class="timeline-now" id="tlNow">回到现在</button>
-      </div>
-      <input type="range" class="tl" id="tlSlider" min="0" max="119" value="0" step="1">
-      <div class="timeline-marks">
-        <span>3天前</span><span>昨天</span><span>现在</span><span>明天</span><span>2天后</span>
-      </div>
-      <div class="timeline-info" id="tlInfo">当前实时天气</div>
     </div>
   </aside>
 
@@ -564,14 +537,7 @@
     water: C("#0c2b38"), waterEdge: C("#183f4b"),
     glass: C("#78a9bd"), warm: C("#ffb25c"), warmHi: C("#ffdca2"), amber: C("#ff8a3c"),
     red: C("#ff5848"), cyan: C("#69d2ff"), white: C("#e8f2f6"),
-    path: C("#7c7b6d"), pathDark: C("#5c5d53"),
-    // —— 城市建筑材质 ——
-    concreteA: C("#5a6570"), concreteB: C("#434c56"), concreteC: C("#6b7682"),
-    concreteDark: C("#32383f"), asphalt: C("#1e2329"), sidewalk: C("#4a525a"),
-    glassBlue: C("#3a6078"), glassTeal: C("#2d5566"), glassDark: C("#1e3542"),
-    glassTop: C("#8fb8cc"), steel: C("#7a8a96"), steelDark: C("#4a5560"),
-    windowWarm: C("#ffc978"), windowCool: C("#9ad4ff"), windowDim: C("#6a7a88"),
-    tower: C("#546e7a"), towerDark: C("#37474f")
+    path: C("#7c7b6d"), pathDark: C("#5c5d53")
   };
 
   /* ----------------------------- noise ------------------------------ */
@@ -593,23 +559,6 @@
       a *= 0.5;
     }
     return v;
-  }
-
-  const CITY_R = 11.5;
-  function terrainH(x, z) {
-    // 平坦城市地面：中心广场微抬，边缘缓降
-    const r = Math.hypot(x, z);
-    let h = 0;
-    h += 0.18 * (1 - smoothstep(0, 4.5, r));
-    h -= smoothstep(9.5, CITY_R, r) * 0.5;
-    h += (fbm(x * 0.6, z * 0.6, 2) - 0.5) * 0.04;
-    return h;
-  }
-  function terrainN(x, z) {
-    const e = 0.09;
-    const hl = terrainH(x - e, z), hr = terrainH(x + e, z);
-    const hd = terrainH(x, z - e), hu = terrainH(x, z + e);
-    return norm([hl - hr, 2 * e, hd - hu]);
   }
 
   /* ----------------------------- builder ---------------------------- */
@@ -767,221 +716,288 @@
     }
   }
 
-  /* ----------------------------- scene ------------------------------ */
+  /* ----------------------------- city scene ------------------------- */
+  Object.assign(PAL, {
+    asphalt: C("#28313a"), asphaltTop: C("#333d47"),
+    sidewalk: C("#535c65"), sidewalkTop: C("#626b73"), curb: C("#7b838a"),
+    facadeA: C("#35434f"), facadeB: C("#485560"), facadeC: C("#2a3845"),
+    facadeD: C("#5e6062"), podium: C("#3d454d"), podiumTop: C("#515a63"),
+    winWarm: C("#ffba6a"), winCool: C("#9fdcff"), winPale: C("#d6ebf6"),
+    neonCyan: C("#37e6ff"), neonMagenta: C("#ff5fc7"), neonAmber: C("#ffab42"),
+    uvGlow: C("#c08bff"),
+    lane: C("#d5cbb0"), laneDim: C("#8e8a7b"), carA: C("#3d4b56"), carB: C("#57443c"),
+    cityRed: C("#ff5445")
+  });
+
+  const CITY_R = 62;
+  const CITY_BASE = 0.18;
+  const ROAD_HALF = 4.3;
+  const terrainH = () => 0;
+  const terrainN = () => [0, 1, 0];
+
+  function addCar(paint, metal, light, detail, x, z, ry, bodyCol) {
+    const rot = (dx, dz) => [x + dx * Math.cos(ry) + dz * Math.sin(ry), z - dx * Math.sin(ry) + dz * Math.cos(ry)];
+    const wheel = (dx, dz) => {
+      const p = rot(dx, dz);
+      metal.box(p[0], 0.22, p[1], 0.34, 0.28, 0.26, PAL.metalDark, ry);
+    };
+    paint.box(x, 0.54, z, 1.86, 0.52, 0.92, bodyCol, ry);
+    paint.box(x, 0.92, z, 0.98, 0.42, 0.78, cmul(bodyCol, 0.8), ry, PAL.winCool);
+    wheel(-0.58, -0.46); wheel(-0.58, 0.46); wheel(0.62, -0.46); wheel(0.62, 0.46);
+    const h1 = rot(0.96, -0.30), h2 = rot(0.96, 0.30);
+    light.box(h1[0], 0.58, h1[1], 0.08, 0.13, 0.20, PAL.winPale, ry);
+    light.box(h2[0], 0.58, h2[1], 0.08, 0.13, 0.20, PAL.winPale, ry);
+    const t1 = rot(-0.96, -0.30), t2 = rot(-0.96, 0.30);
+    light.box(t1[0], 0.58, t1[1], 0.05, 0.10, 0.16, PAL.cityRed, ry);
+    light.box(t2[0], 0.58, t2[1], 0.05, 0.10, 0.16, PAL.cityRed, ry);
+    detail.box(x, 0.26, z, 1.7, 0.08, 0.84, PAL.metalDark, ry);
+  }
+
+  function addTower(paint, metal, light, detail, opt) {
+    const { x, z, w, d, h, style, seed } = opt;
+    const facade = [PAL.facadeA, PAL.facadeB, PAL.facadeC, PAL.facadeD][style % 4];
+    const topCol = cmul(facade, 1.18);
+    const podH = 3.1;
+    const shaftTop = CITY_BASE + h;
+
+    /* podium / street retail base */
+    paint.box(x, CITY_BASE + podH / 2, z, w + 2.4, podH, d + 2.4, PAL.podium, 0, PAL.podiumTop);
+    metal.box(x, CITY_BASE + podH + 0.06, z, w + 2.5, 0.13, d + 2.5, PAL.metalDark);
+    for (let k = 0; k < 3; k++) {
+      const sx = x - (w + 2.4) / 2 + (k + 0.5) * (w + 2.4) / 3;
+      light.box(sx, CITY_BASE + 1.45, z + (d + 2.4) / 2 + 0.012, (w + 2.4) / 3 * 0.62, 0.42, 0.025, PAL.winWarm);
+    }
+
+    /* main shaft */
+    const shaftH = h - podH;
+    paint.box(x, CITY_BASE + podH + shaftH / 2, z, w, shaftH, d, facade, 0, topCol);
+    const yr = (CITY_BASE + podH + shaftTop) / 2;
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        metal.box(x + sx * (w / 2 - 0.04), yr, z + sz * (d / 2 - 0.04), 0.09, shaftH, 0.09, PAL.metalDark);
+      }
+    }
+    /* vertical window strips on all faces, with occasional dark bays */
+    const cols = Math.max(3, Math.min(6, Math.round(w / 1.45)));
+    const floors = Math.max(5, Math.floor((h - 5) / 2.25));
+    for (let f = 0; f < floors; f++) {
+      const yy = CITY_BASE + podH + 1.2 + f * ((shaftH - 2.3) / Math.max(1, floors - 1));
+      for (let c = 0; c < cols; c++) {
+        if (hash2(seed * 11 + f * 1.7, c * 3.1) < 0.05) continue;
+        const off = -w / 2 + (c + 0.5) * w / cols;
+        const offz = -d / 2 + (c + 0.5) * d / cols;
+        const winH = Math.min(0.64, (shaftH / floors) * 0.48);
+        const winW = Math.min(0.56, w / cols * 0.48);
+        const cc = hash2(seed + f * 0.31, c * 0.77) > 0.55 ? PAL.winCool : PAL.winWarm;
+        light.box(x + off, yy, z + d / 2 + 0.012, winW, winH, 0.025, cc);
+        light.box(x + off, yy, z - d / 2 - 0.012, winW, winH, 0.025, cc);
+        light.box(x + w / 2 + 0.012, yy, z + offz, 0.025, winH, winW, cc);
+        light.box(x - w / 2 - 0.012, yy, z + offz, 0.025, winH, winW, cc);
+      }
+    }
+    /* floor bands / mullions catch the weather light */
+    for (let f = 0; f < floors; f += 1) {
+      const yb = CITY_BASE + podH + 1.2 + (f + 0.55) * ((shaftH - 2.3) / Math.max(1, floors - 1));
+      metal.box(x, yb, z + d / 2 + 0.018, w * 0.96, 0.045, 0.04, cmul(PAL.metalDark, 0.9));
+      metal.box(x, yb, z - d / 2 - 0.018, w * 0.96, 0.045, 0.04, cmul(PAL.metalDark, 0.9));
+      metal.box(x + w / 2 + 0.018, yb, z, 0.04, 0.045, d * 0.96, cmul(PAL.metalDark, 0.9));
+      metal.box(x - w / 2 - 0.018, yb, z, 0.04, 0.045, d * 0.96, cmul(PAL.metalDark, 0.9));
+    }
+
+    /* setback crown or parapet */
+    let crownY = shaftTop;
+    let crownW = w * 0.84, crownD = d * 0.84;
+    if (h > 26) {
+      const cw = w * 0.62, cd = d * 0.62, ch = Math.min(5.0, h * 0.12);
+      paint.box(x, shaftTop + ch / 2, z, cw, ch, cd, cmul(facade, 1.10), 0, topCol);
+      metal.box(x, shaftTop + ch + 0.05, z, cw * 0.9, 0.14, cd * 0.9, PAL.metalDark);
+      crownY = shaftTop + ch;
+      crownW = cw; crownD = cd;
+    } else {
+      metal.box(x, shaftTop + 0.15, z, w * 0.84, 0.22, d * 0.84, PAL.metalDark);
+    }
+    detail.box(x - w * 0.18, crownY + 0.65, z + d * 0.10, 1.1, 0.68, 1.0, PAL.metalDark, 0.14);
+    detail.box(x + w * 0.22, crownY + 0.55, z - d * 0.12, 0.8, 0.45, 0.8, PAL.metal);
+    metal.cyl(x + w * 0.30, crownY + 0.2, z - d * 0.22, 0.035, 3.6, 6, PAL.metalLight);
+    light.sphere(x + w * 0.30, crownY + 3.85, z - d * 0.22, 0.075, PAL.cityRed, 8, 5);
+
+    /* sign / accent: always readable against the night sky */
+    const accent = style === 1 ? PAL.neonMagenta : (style === 2 ? PAL.neonAmber : PAL.neonCyan);
+    if (h > 20) {
+      light.box(x, crownY + 0.055, z + crownD * 0.48, crownW * 0.94, 0.04, 0.045, accent);
+      light.box(x, crownY + 0.055, z - crownD * 0.48, crownW * 0.94, 0.04, 0.045, accent);
+      light.box(x + crownW * 0.48, crownY + 0.055, z, 0.045, 0.04, crownD * 0.94, accent);
+      light.box(x - crownW * 0.48, crownY + 0.055, z, 0.045, 0.04, crownD * 0.94, accent);
+    }
+    light.box(x + w / 2 + 0.045, CITY_BASE + podH + shaftH * 0.58, z + d / 2 + 0.045, 0.10, shaftH * 0.42, 0.10, accent);
+    if (h > 23) {
+      light.box(x, CITY_BASE + h * 0.72, z + d / 2 + 0.055, w * 0.62, 0.38, 0.05, accent);
+    }
+  }
+
+  function addDistantBlock(paint, metal, light, x, z, w, d, h, seed) {
+    const c = [PAL.facadeC, PAL.facadeA, PAL.facadeB][Math.floor(hash2(seed, 4) * 3) % 3];
+    paint.box(x, CITY_BASE + h / 2, z, w, h, d, c, 0, cmul(c, 1.1));
+    metal.box(x, CITY_BASE + h + 0.08, z, w * 0.82, 0.16, d * 0.82, PAL.metalDark);
+    if (hash2(seed, 7) > 0.42) {
+      const wc = hash2(seed, 9) > 0.5 ? PAL.winCool : PAL.winWarm;
+      const yy = CITY_BASE + h * 0.58;
+      light.box(x, yy, z + d / 2 + 0.012, w * 0.52, 0.20, 0.025, wc);
+      light.box(x, yy, z - d / 2 - 0.012, w * 0.52, 0.20, 0.025, wc);
+      light.box(x + w / 2 + 0.012, yy, z, 0.025, 0.20, d * 0.52, wc);
+      light.box(x - w / 2 - 0.012, yy, z, 0.025, 0.20, d * 0.52, wc);
+    }
+    if (h > 18) light.sphere(x, CITY_BASE + h + 1.0, z, 0.05, PAL.cityRed, 6, 4);
+  }
+
   function buildWorld() {
     const terrain = new MeshBuilder();
     const rock = new MeshBuilder();
     const paint = new MeshBuilder();
     const metal = new MeshBuilder();
-    const foliage = new MeshBuilder();
+    const detail = new MeshBuilder();
     const water = new MeshBuilder();
     const light = new MeshBuilder();
-    const glass = new MeshBuilder();
-    const detail = new MeshBuilder();
+    const uv = new MeshBuilder();
 
-    /* ---- 城市地面：圆形混凝土广场 ---- */
-    const SEG = 72;
-    const groundY = terrainH(0, 0) + 0.02;
-    for (let j = 0; j < SEG; j++) {
-      const a0 = j / SEG * Math.PI * 2;
-      const a1 = (j + 1) / SEG * Math.PI * 2;
-      const p0 = [Math.cos(a0) * CITY_R, groundY, Math.sin(a0) * CITY_R];
-      const p1 = [Math.cos(a1) * CITY_R, groundY, Math.sin(a1) * CITY_R];
-      terrain.triC([0, groundY, 0], p0, p1,
-        terrainColor(0, 0),
-        terrainColor(Math.cos(a0) * CITY_R * 0.6, Math.sin(a0) * CITY_R * 0.6),
-        terrainColor(Math.cos(a1) * CITY_R * 0.6, Math.sin(a1) * CITY_R * 0.6),
-        [0, 1, 0]);
+    /* ---- asphalt city floor, no island, no cliffs ---- */
+    terrain.box(0, -0.55, 0, 130, 1.1, 130, PAL.asphalt, 0, PAL.asphaltTop);
+    /* ---- raised sidewalk quadrants around the crossroads ---- */
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        rock.box(sx * 34.15, 0.09, sz * 34.15, 59.4, 0.18, 59.4, PAL.sidewalk, 0, PAL.sidewalkTop);
+      }
+    }
+    /* curbs */
+    for (const s of [-1, 1]) {
+      rock.box(s * ROAD_HALF, 0.08, 34.1, 0.24, 0.16, 59.4, PAL.curb);
+      rock.box(s * ROAD_HALF, 0.08, -34.1, 0.24, 0.16, 59.4, PAL.curb);
+      rock.box(34.1, 0.08, s * ROAD_HALF, 59.4, 0.16, 0.24, PAL.curb);
+      rock.box(-34.1, 0.08, s * ROAD_HALF, 59.4, 0.16, 0.24, PAL.curb);
     }
 
-    /* ---- 道路网格（沥青色长条） ---- */
-    const roadY = groundY + 0.012;
-    for (let i = -3; i <= 3; i++) {
-      const p = i * 3.4;
-      if (Math.abs(p) > CITY_R - 0.8) continue;
-      const halfLen = Math.sqrt(Math.max(0.1, CITY_R * CITY_R - p * p)) - 0.3;
-      detail.box(0, roadY, p, halfLen * 2, 0.025, 0.55, PAL.asphalt, 0);
-      detail.box(p, roadY, 0, 0.55, 0.025, halfLen * 2, PAL.asphalt, 0);
+    /* ---- avenue markings ---- */
+    for (let x = -56; x <= 56; x += 4.2) {
+      if (Math.abs(x) < 6.4) continue;
+      detail.box(x, 0.018, 0, 2.0, 0.012, 0.13, PAL.lane, 0);
     }
-
-    /* ---- 建筑生成器 ---- */
-    function addTower(x, z, w, d, h, bodyCol, seed, opts) {
-      opts = opts || {};
-      const y = terrainH(x, z);
-      const glassy = !!opts.glass;
-      // 主体
-      if (glassy) {
-        glass.box(x, y + h / 2, z, w, h, d, bodyCol, 0, PAL.glassTop);
-      } else {
-        paint.box(x, y + h / 2, z, w, h, d, bodyCol, 0, cmul(bodyCol, 1.1));
-      }
-      // 屋顶
-      metal.box(x, y + h + 0.06, z, w * 0.92, 0.12, d * 0.92, PAL.roof, 0);
-      // 屋顶设备箱
-      if (hash2(seed, 9) > 0.35) {
-        metal.box(x + w * 0.18, y + h + 0.2, z - d * 0.12, w * 0.28, 0.18, d * 0.22, PAL.steelDark, 0);
-      }
-      // 窗户网格
-      const floors = Math.max(2, Math.floor(h / 0.42));
-      const colsF = Math.max(2, Math.floor(w / 0.34));
-      const colsS = Math.max(2, Math.floor(d / 0.34));
-      for (let f = 0; f < floors; f++) {
-        const wy = y + 0.32 + f * 0.4;
-        if (wy > y + h - 0.28) break;
-        for (let c = 0; c < colsF; c++) {
-          const wx = x - w / 2 + 0.24 + c * (w - 0.48) / Math.max(1, colsF - 1);
-          // 南立面
-          if (hash2(seed * 31 + f, c) > 0.40) {
-            const wc = hash2(seed * 7 + f, c) > 0.78 ? PAL.windowCool : PAL.windowWarm;
-            light.box(wx, wy, z + d / 2 + 0.014, 0.15, 0.19, 0.02, wc);
-          }
-          // 北立面
-          if (hash2(seed * 53 + f, c) > 0.55) {
-            light.box(wx, wy, z - d / 2 - 0.014, 0.15, 0.19, 0.02, PAL.windowWarm);
-          }
-        }
-        for (let c = 0; c < colsS; c++) {
-          const wz = z - d / 2 + 0.24 + c * (d - 0.48) / Math.max(1, colsS - 1);
-          if (hash2(seed * 71 + f, c) > 0.50) {
-            light.box(x + w / 2 + 0.014, wy, wz, 0.02, 0.19, 0.15, PAL.windowWarm);
-          }
-          if (hash2(seed * 83 + f, c) > 0.60) {
-            light.box(x - w / 2 - 0.014, wy, wz, 0.02, 0.19, 0.15, PAL.windowWarm);
-          }
-        }
-      }
-      // 顶部天线 + 红灯
-      if (h > 5.5) {
-        metal.cyl(x, y + h + 0.12, z, 0.025, 0.85, 6, PAL.steel);
-        light.sphere(x, y + h + 1.0, z, 0.045, PAL.red, 8, 5);
+    for (let z = -56; z <= 56; z += 4.2) {
+      if (Math.abs(z) < 6.4) continue;
+      detail.box(0, 0.018, z, 0.13, 0.012, 2.0, PAL.lane, 0);
+    }
+    for (const s of [-1, 1]) {
+      for (let k = -3; k <= 3; k++) {
+        detail.box(s * 6.3, 0.026, k * 0.72, 1.25, 0.014, 0.34, PAL.laneDim, 0);
+        detail.box(k * 0.72, 0.026, s * 6.3, 0.34, 0.014, 1.25, PAL.laneDim, 0);
       }
     }
 
-    /* ---- 地标超高层 ---- */
-    addTower(0, 0, 1.5, 1.5, 11.0, PAL.tower, 1, { glass: true });
-    metal.cyl(0, terrainH(0, 0) + 11.1, 0, 0.09, 1.4, 8, PAL.steel);
-    light.sphere(0, terrainH(0, 0) + 12.6, 0, 0.07, PAL.cyan, 10, 6);
-
-    addTower(-3.4, 1.6, 1.25, 1.05, 8.0, PAL.glassBlue, 2, { glass: true });
-    addTower(3.0, -2.2, 1.15, 1.35, 6.8, PAL.concreteC, 3, {});
-
-    /* ---- 中高层建筑群 ---- */
-    const mids = [
-      [-5.2, -3.6, 1.0, 0.9, 4.4, 4],
-      [-4.6, 3.9, 1.15, 1.0, 3.6, 5],
-      [-2.1, 5.4, 0.95, 0.9, 3.1, 6],
-      [4.6, 4.1, 1.25, 1.05, 5.0, 7],
-      [5.6, -0.6, 1.0, 1.15, 3.9, 8],
-      [3.9, -4.6, 1.15, 0.95, 3.3, 9],
-      [-6.0, 0.6, 0.95, 1.05, 2.9, 10],
-      [0.6, -5.6, 1.05, 0.95, 2.6, 11],
-      [-1.6, -3.9, 0.85, 0.85, 2.3, 12],
-      [1.9, 3.6, 0.95, 0.95, 3.1, 13]
+    /* ---- skyline: three dense blocks framing an open southeast plaza ---- */
+    const towers = [
+      { x: -11, z: -15, w: 7.6, d: 7.4, h: 41, style: 0, seed: 1 },
+      { x: 8.5, z: -18, w: 6.4, d: 6.4, h: 33, style: 1, seed: 2 },
+      { x: 18, z: -9, w: 5.8, d: 5.8, h: 24, style: 2, seed: 3 },
+      { x: -20, z: -7, w: 5.4, d: 5.4, h: 21, style: 1, seed: 4 },
+      { x: -7, z: -24, w: 5.8, d: 5.8, h: 27, style: 2, seed: 5 },
+      { x: -19, z: -20, w: 4.8, d: 5.0, h: 16, style: 0, seed: 6 },
+      { x: 17, z: -21, w: 5.2, d: 5.2, h: 19, style: 0, seed: 7 },
+      { x: -12, z: 9, w: 6.4, d: 6.4, h: 25, style: 2, seed: 8 },
     ];
-    for (const b of mids) {
-      addTower(b[0], b[1], b[2], b[3], b[4],
-        hash2(b[5], 1) > 0.5 ? PAL.concreteA : PAL.concreteB,
-        b[5], { glass: hash2(b[5], 2) > 0.72 });
+    for (const t of towers) addTower(paint, metal, light, detail, t);
+    /* UV halo: only visible when the UV index is meaningful */
+    uv.torus(-11.0, 43.6, -15.0, 5.8, 0.055, 56, 6, PAL.uvGlow);
+    uv.torus(-11.0, 43.6, -15.0, 6.8, 0.030, 56, 6, PAL.uvGlow);
+
+    /* distant perimeter blocks fill the horizon without turning into a wall */
+    const R = (() => {
+      let s = 9127;
+      return () => {
+        s = (s * 1664525 + 1013904223) >>> 0;
+        return s / 4294967296;
+      };
+    })();
+    for (let i = 0; i < 38; i++) {
+      const a = i / 38 * Math.PI * 2 + (R() - 0.5) * 0.08;
+      const r = 27 + R() * 28;
+      const da = Math.atan2(Math.sin(a - 0.72), Math.cos(a - 0.72));
+      if (Math.abs(da) < 0.95 && r > 30) continue;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const camX = 74.0 * Math.cos(0.10) * Math.sin(0.72);
+      const camZ = 74.0 * Math.cos(0.10) * Math.cos(0.72);
+      if (Math.hypot(x - camX, z - camZ) < 90.0) continue;
+      const w = 3.0 + R() * 5.4, d = 3.0 + R() * 5.4, h = 7 + R() * 25;
+      addDistantBlock(paint, metal, light, x, z, w, d, h, 30 + i);
     }
 
-    /* ---- 外围矮楼 ---- */
-    for (let k = 0; k < 14; k++) {
-      const a = k / 14 * Math.PI * 2 + 0.35;
-      const r = 7.8 + hash2(k, 1) * 1.6;
-      const x = Math.cos(a) * r;
-      const z = Math.sin(a) * r;
-      const w = 0.6 + hash2(k, 2) * 0.45;
-      const d = 0.6 + hash2(k, 3) * 0.45;
-      const h = 1.2 + hash2(k, 4) * 1.6;
-      addTower(x, z, w, d, h, PAL.concreteDark, 20 + k, {});
-    }
+    /* ---- wet street puddles; also used for rain rings ---- */
+    const puddles = [
+      [2.4, 0.022, 1.4, 1.15], [-1.7, 0.022, 1.8, 1.32], [0.8, 0.022, -0.8, 0.72],
+      [-2.5, 0.022, -2.2, 0.58], [7.6, 0.022, 1.3, 1.05], [-9.0, 0.022, -1.1, 1.18],
+      [1.2, 0.022, 8.4, 0.92], [-1.4, 0.022, -8.2, 0.82], [15.5, 0.022, 1.6, 0.68],
+      [-17.0, 0.022, -1.5, 0.76], [1.4, 0.022, 17.0, 0.7], [-1.8, 0.022, -17.5, 0.74]
+    ];
+    for (const p of puddles) water.disc(p[0], p[1], p[2], p[3], 26, PAL.water, true);
 
-    /* ---- 路灯 ---- */
+    /* ---- four working street lamps (actual point lights) ---- */
     const lampPositions = [];
-    const lampSpots = [
-      [-1.7, -1.7], [1.7, -1.7], [-1.7, 1.7], [1.7, 1.7],
-      [-5.0, -1.7], [5.0, 1.7], [-1.7, 5.0], [1.7, -5.0],
-      [-6.6, 3.3], [6.6, -3.3], [3.3, 6.6], [-3.3, -6.6]
-    ];
-    for (let i = 0; i < lampSpots.length; i++) {
-      const x = lampSpots[i][0], z = lampSpots[i][1];
-      const y = terrainH(x, z);
-      metal.cyl(x, y + 0.02, z, 0.032, 1.7, 6, PAL.steelDark);
-      metal.box(x + 0.16, y + 1.68, z, 0.32, 0.035, 0.05, PAL.steelDark, 0.3);
-      light.sphere(x + 0.3, y + 1.65, z, 0.065, PAL.warmHi, 8, 5);
-      lampPositions.push([x + 0.3, y + 1.65, z, 0.95]);
+    const corners = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
+    for (let i = 0; i < corners.length; i++) {
+      const sx = corners[i][0], sz = corners[i][1];
+      const x = sx * 5.0, z = sz * 5.0;
+      const headX = x - sx * 1.15;
+      metal.cyl(x, CITY_BASE, z, 0.085, 5.65, 8, PAL.metalDark);
+      metal.box(x - sx * 0.55, 5.52, z, 1.22, 0.075, 0.075, PAL.metalDark);
+      light.sphere(headX, 5.44, z, 0.105, PAL.warmHi, 10, 6);
+      lampPositions.push([headX, 5.38, z, 12.0]);
+    }
+    /* additional lamps down the avenues, emissive only */
+    for (const x of [-14, -28, 14, 28]) {
+      for (const z of [-5.45, 5.45]) {
+        metal.cyl(x, CITY_BASE, z, 0.06, 4.2, 6, PAL.metalDark);
+        light.sphere(x, 4.28, z, 0.075, PAL.warmHi, 8, 5);
+      }
+    }
+    for (const z of [-14, -28, 14, 28]) {
+      for (const x of [-5.45, 5.45]) {
+        metal.cyl(x, CITY_BASE, z, 0.06, 4.2, 6, PAL.metalDark);
+        light.sphere(x, 4.28, z, 0.075, PAL.warmHi, 8, 5);
+      }
     }
 
-    /* ---- 行驶车辆（道路上的移动光点） ---- */
-    for (let k = 0; k < 16; k++) {
-      const lane = (k % 4) - 1.5; // 4 lanes
-      const isXAxis = k % 2 === 0;
-      const dir = k % 4 < 2 ? 1 : -1;
-      const offset = (k * 1.73) % 6.8 - 3.4;
-      const carY = groundY + 0.08;
-      // 车头灯（白色/暖色）
-      light.sphere(isXAxis ? offset : lane * 3.4, carY, isXAxis ? lane * 3.4 : offset,
-        0.045, dir > 0 ? PAL.windowCool : PAL.warmHi, 6, 4);
+    /* ---- cars make the scale and the wet street specific ---- */
+    addCar(paint, metal, light, detail, -10.5, 1.55, 0, PAL.carA);
+    addCar(paint, metal, light, detail, 8.5, -1.55, Math.PI, PAL.carB);
+    addCar(paint, metal, light, detail, 1.55, -11.0, Math.PI / 2, PAL.carA);
+    addCar(paint, metal, light, detail, -1.55, 12.5, -Math.PI / 2, PAL.carB);
+
+    /* ---- plaza furniture (no trees, no observatory) ---- */
+    for (let k = 0; k < 4; k++) {
+      const x = 11 + (k % 2) * 3.4, z = 17 + Math.floor(k / 2) * 2.0;
+      metal.box(x, 0.55, z, 2.4, 0.12, 0.55, PAL.metalDark, 0.08);
+      metal.box(x - 1.0, 0.33, z - 0.18, 0.10, 0.42, 0.10, PAL.metal);
+      metal.box(x + 1.0, 0.33, z - 0.18, 0.10, 0.42, 0.10, PAL.metal);
     }
 
     return {
       batches: [
-        { name: "terrain", mesh: terrain, mat: { rough: 0.95, metal: 0.0, emissive: 0, alpha: 1 } },
-        { name: "rock", mesh: rock, mat: { rough: 0.92, metal: 0.02, emissive: 0, alpha: 1 } },
-        { name: "paint", mesh: paint, mat: { rough: 0.7, metal: 0.03, emissive: 0, alpha: 1 } },
-        { name: "metal", mesh: metal, mat: { rough: 0.42, metal: 0.62, emissive: 0, alpha: 1 } },
-        { name: "foliage", mesh: foliage, mat: { rough: 0.9, metal: 0.0, emissive: 0, alpha: 1 } },
-        { name: "water", mesh: water, mat: { rough: 0.06, metal: 0.35, emissive: 0, alpha: 1 } },
-        { name: "detail", mesh: detail, mat: { rough: 0.85, metal: 0.05, emissive: 0, alpha: 1 } },
-        { name: "light", mesh: light, mat: { rough: 0.35, metal: 0.0, emissive: 2.7, alpha: 1 } },
-        { name: "glass", mesh: glass, mat: { rough: 0.08, metal: 0.18, emissive: 0.12, alpha: 0.24, blend: true } }
+        { name: "terrain", mesh: terrain, mat: { rough: 0.78, metal: 0.10, emissive: 0, alpha: 1 } },
+        { name: "rock", mesh: rock, mat: { rough: 0.86, metal: 0.02, emissive: 0, alpha: 1 } },
+        { name: "paint", mesh: paint, mat: { rough: 0.62, metal: 0.16, emissive: 0, alpha: 1 } },
+        { name: "metal", mesh: metal, mat: { rough: 0.38, metal: 0.68, emissive: 0, alpha: 1 } },
+        { name: "detail", mesh: detail, mat: { rough: 0.72, metal: 0.15, emissive: 0, alpha: 1 } },
+        { name: "water", mesh: water, mat: { rough: 0.06, metal: 0.40, emissive: 0, alpha: 1 } },
+        { name: "light", mesh: light, mat: { rough: 0.28, metal: 0.0, emissive: 2.4, alpha: 1 } },
+        { name: "uv", mesh: uv, mat: { rough: 0.2, metal: 0.0, emissive: 0, alpha: 1 } }
       ],
       lampPositions,
+      puddles,
       anchors: {
-        rain: [5.2, 0.4, 3.2],
-        cloud: [0, 10.5, 0],
-        uv: [0, 8.0, 0],
-        light: [0, 11.5, 0]
+        rain: [2.5, 1.5, 2.3],
+        cloud: [-2.0, 34.0, -8.0],
+        uv: [-11.0, 42.8, -15.0],
+        light: [3.85, 5.9, 3.9]
       }
     };
-  }
-
-  function terrainColor(x, z) {
-    // 城市地面：混凝土 + 道路网格
-    let c = cmix(PAL.concreteA, PAL.concreteB, fbm(x * 0.5 + 3, z * 0.5 - 2, 3));
-    c = cmix(c, PAL.sidewalk, 0.25);
-    // 道路网
-    const gx = Math.abs(((x + 16) % 3.4) - 1.7);
-    const gz = Math.abs(((z + 16) % 3.4) - 1.7);
-    const road = smoothstep(0.30, 0.05, Math.min(gx, gz));
-    c = cmix(c, PAL.asphalt, road * 0.9);
-    return c;
-  }
-
-  function addTree(trunk, needles, x, z, s, seed) {
-    const y = terrainH(x, z);
-    trunk.cyl(x, y + 0.02, z, 0.075 * s, 0.72 * s, 6, PAL.trunk);
-    const cA = cmix(PAL.treeA, PAL.treeB, hash2(seed, 2));
-    const cB = cmix(cA, PAL.treeC, 0.35 + hash2(seed, 4) * 0.35);
-    needles.cone(x, y + 0.48 * s, z, 0.62 * s, 0.9 * s, 9, cA);
-    needles.cone(x, y + 0.98 * s, z, 0.47 * s, 0.8 * s, 9, cmix(cA, PAL.treeB, 0.4));
-    needles.cone(x, y + 1.43 * s, z, 0.32 * s, 0.68 * s, 8, cmix(cB, PAL.treeB, 0.25));
-    if (s > 1.0) {
-      needles.cone(x + 0.28 * s, y + 0.82 * s, z - 0.18 * s, 0.32 * s, 0.55 * s, 7, cB);
-    }
-  }
-
-  function addFloatRock(rockB, terrainB, x, y, z, s, seed) {
-    const n = fbm(x * 0.7 + 4, z * 0.7 - 2, 3);
-    const col = cmix(PAL.rockA, PAL.rockC, 0.3 + n * 0.5);
-    rockB.hemiSphere(x, y, z, s, 9, 5, col, true);
-    rockB.cone(x, y - 0.1, z, s * 0.9, -s * 2.1, 8, cmul(col, 0.86));
-    for (let k = 0; k < 4; k++) {
-      const a = seed * 9 + k * 1.8;
-      const rr = s * (0.8 + hash2(k, seed) * 0.7);
-      const px = x + Math.cos(a) * rr, pz = z + Math.sin(a) * rr;
-      terrainB.cone(px, y - s * 0.7, pz, 0.09 * s, 0.5 * s, 5, PAL.treeC);
-    }
   }
 
   /* ----------------------------- class ------------------------------ */
@@ -1013,8 +1029,9 @@
       this.batches = [];
       this.lampPositions = this.world.lampPositions;
       this.anchors = this.world.anchors;
-      this.cam = { az: 0.72, el: 0.26, dist: 22.0, tx: 0, ty: 4.5, tz: 0 };
-      this.camGoal = { az: 0.72, el: 0.26, dist: 22.0, tx: 0, ty: 4.5, tz: 0 };
+      this.puddles = this.world.puddles || [];
+      this.cam = { az: 0.72, el: 0.10, dist: 74.0, tx: 0, ty: 17.0, tz: -6.0 };
+      this.camGoal = { az: 0.72, el: 0.10, dist: 74.0, tx: 0, ty: 17.0, tz: -6.0 };
       this.sun = { dir: [0, -1, 0], alt: -1, moon: [0, 1, 0], day: 0, twilight: 0 };
       this.quality = { bloomScale: 0.5, rainMax: 2600 };
       this._initRenderer();
@@ -1054,7 +1071,7 @@
   }
 
   window.WeatherScene = WeatherScene;
-  window.WeatherTerrain = { H: terrainH, N: terrainN, R: CITY_R };
+  window.WeatherTerrain = { H: terrainH, N: terrainN, R: 62 };
 })();
 
 </script>
@@ -1182,6 +1199,7 @@ uniform float uEmissive;
 uniform float uRough;
 uniform float uMetal;
 uniform float uAlpha;
+uniform float uDay;
 uniform int uLampCount;
 uniform vec3 uLampPos[4];
 uniform vec3 uLampColor[4];
@@ -1221,6 +1239,7 @@ void main() {
   vec3 light = uSunColor * ndl * sh;
   vec3 amb = mix(uGroundAmb, uSkyAmb, clamp(N.y * 0.5 + 0.5, 0.0, 1.0));
   vec3 col = vC * (amb + light);
+  col += vC * vec3(0.20, 0.22, 0.26) * uDay * (0.55 + 0.45 * max(N.y, 0.0));
   col += vC * uMoonColor * max(N.y, 0.0) * 0.3;
 
   float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
@@ -1232,7 +1251,7 @@ void main() {
     if (i >= uLampCount) break;
     vec3 d = uLampPos[i] - vWorld;
     float dd = dot(d, d);
-    float att = 1.0 / (1.0 + dd * 1.35);
+    float att = 1.0 / (1.0 + dd * 0.18);
     float nl = max(dot(N, normalize(d)), 0.0);
     col += vC * uLampColor[i] * uLampPower[i] * att * (0.16 + 0.84 * nl);
   }
@@ -1346,7 +1365,7 @@ void main() {
   float halo = pow(max(sd, 0.0), 9.0);
   col += vec3(0.30, 0.07, 0.55) * halo * uUV * 1.25;
   float uvHaze = exp(-pow((y - 0.12) / 0.22, 2.0));
-  col += vec3(0.16, 0.04, 0.28) * uUV * uvHaze * 0.34;
+  col += vec3(0.22, 0.05, 0.38) * uUV * uvHaze * 0.55;
 
   float md = dot(dir, uMoonDir);
   float moonDisk = smoothstep(0.99958, 0.99984, md);
@@ -1365,8 +1384,13 @@ void main() {
   vec3 overcastCol = mix(vec3(0.018, 0.025, 0.038), vec3(0.29, 0.34, 0.40), uDay);
   col = mix(col, overcastCol, uOvercast * 0.58);
 
-  float n = fbm2(dir.xz * 3.4 + vec2(uTime * 0.004, 0.0));
-  col += vec3(0.08, 0.09, 0.11) * smoothstep(0.58, 0.88, n) * (0.12 + 0.28 * uDay) * smoothstep(0.02, 0.3, y);
+  vec2 cuv = dir.xz / max(0.10, y + 0.16) * 3.1;
+  float n = fbm2(cuv + vec2(uTime * 0.0035, uTime * 0.0012));
+  float cband = smoothstep(0.01, 0.07, y) * (1.0 - smoothstep(0.36, 0.86, y));
+  float cov = smoothstep(0.58 - 0.22 * uOvercast, 0.86 - 0.16 * uOvercast, n) * cband;
+  vec3 cloudCol = mix(vec3(0.075, 0.090, 0.120), vec3(0.72, 0.77, 0.82), uDay);
+  cloudCol = mix(cloudCol, uSunColor * 0.22, 0.30 * uDay);
+  col = mix(col, cloudCol, cov * (0.20 + 0.48 * uOvercast) * smoothstep(0.015, 0.10, uOvercast));
 
   col = mix(col, uFogColor, smoothstep(0.18, 0.0, abs(y)) * 0.24);
   outColor = vec4(max(col, 0.0), 1.0);
@@ -1442,12 +1466,13 @@ void main(){
   float r = length(vUv);
   float n = fbm2(vUv * 2.35 + vec2(vSeed * 7.3, vSeed * 3.1) + vec2(uTime * 0.008, 0.0));
   float n2 = fbm2(vUv * 5.5 - vec2(vSeed * 2.0, 0.0) - vec2(uTime * 0.006, 0.0));
-  float mask = smoothstep(1.02, 0.15, r + (n - 0.5) * 0.82);
-  float alpha = mask * (0.45 + 0.65 * n2) * vAlpha;
+  float mask = smoothstep(1.02, 0.2, r + (n - 0.5) * 0.72);
+  float alpha = mask * (0.34 + 0.56 * n2) * vAlpha;
   if (alpha < 0.008) discard;
   float top = clamp(vUv.y * 0.5 + 0.5, 0.0, 1.0);
   vec3 col = mix(uCloudShade, uCloudLit, 0.18 + 0.82 * top);
   col += uSunColor * pow(max(0.0, 1.0 - r), 3.0) * 0.038 * (0.12 + 0.88 * uDay);
+  col += vec3(0.18, 0.10, 0.045) * (1.0 - uDay) * pow(max(0.0, 1.0 - r), 2.2) * 0.55;
   col += vec3(0.012, 0.018, 0.030) * pow(top, 1.6);
   outColor = vec4(col, alpha);
 }`;
@@ -1464,15 +1489,15 @@ uniform vec3 uCamPos;
 uniform float uScale;
 out float vAlpha;
 void main(){
-  float fall = fract(aSeed.w + uTime * aSpeed * (0.55 + uRain * 0.95));
-  float y = aSeed.z - fall * 12.0;
-  float x = aSeed.x + uWind * fall * 1.8;
+  float fall = fract(aSeed.w + uTime * aSpeed * (0.55 + uRain * 0.85));
+  float y = aSeed.z - fall * 26.0;
+  float x = aSeed.x + uWind * fall * 1.5;
   vec3 p = vec3(x, y, aSeed.y);
   vec4 clip = uVP * vec4(p, 1.0);
   float dist = length(uCamPos - p);
-  float edge = min(smoothstep(0.0, 0.06, fall), smoothstep(1.0, 0.88, fall));
-  vAlpha = uRain * edge * (1.0 - smoothstep(22.0, 48.0, dist));
-  gl_PointSize = clamp(120.0 / (dist + 2.5) * uScale, 2.0, 16.0);
+  float edge = min(smoothstep(0.0, 0.07, fall), smoothstep(1.0, 0.90, fall));
+  vAlpha = uRain * edge * (1.0 - smoothstep(85.0, 145.0, dist));
+  gl_PointSize = clamp(420.0 / (dist + 3.0) * uScale, 3.0, 22.0);
   gl_Position = clip;
 }`;
 
@@ -1482,10 +1507,10 @@ in float vAlpha;
 out vec4 outColor;
 void main(){
   vec2 q = gl_PointCoord - 0.5;
-  float a = exp(-pow(abs(q.x) / 0.055, 2.0));
-  a *= smoothstep(0.5, 0.10, abs(q.y));
-  if (a < 0.012) discard;
-  outColor = vec4(vec3(0.55, 0.68, 0.82), a * vAlpha * 0.72);
+  float a = exp(-pow(abs(q.x) / 0.085, 2.0));
+  a *= smoothstep(0.5, 0.18, abs(q.y));
+  if (a < 0.015) discard;
+  outColor = vec4(vec3(0.62, 0.74, 0.86), a * vAlpha * 0.92);
 }`;
 
   const RIPPLE_VS = `#version 300 es
@@ -1667,7 +1692,7 @@ void main(){
     this.U = {
       scene: uniformMap(gl, this.P.scene, [
         "uVP", "uTime", "uWater", "uCamPos", "uSunDir", "uSunColor", "uSkyAmb", "uGroundAmb",
-        "uFogColor", "uMoonColor", "uFogDen", "uWet", "uSnow", "uEmissive", "uRough", "uMetal", "uAlpha",
+        "uFogColor", "uMoonColor", "uFogDen", "uWet", "uSnow", "uEmissive", "uRough", "uMetal", "uAlpha", "uDay",
         "uLampCount", "uLampPos[0]", "uLampColor[0]", "uLampPower[0]", "uShadow", "uLightVP", "uShadowOn"
       ]),
       shadow: uniformMap(gl, this.P.shadow, ["uLightVP"]),
@@ -1757,12 +1782,12 @@ void main(){
         datas.push(mix(cfg.thMin, cfg.thMax, R()), R() * Math.PI * 2);
       }
     };
-    addLayer(0, 22, { rMin: 6.0, rMax: 13.0, yMin: 5.5, yMax: 8.5, sMin: 2.2, sMax: 4.5, aspectMin: 0.50, aspectMax: 0.80, aMin: 0.48, aMax: 0.68, thMin: 0.04, thMax: 0.86 });
-    addLayer(1, 18, { rMin: 12.0, rMax: 22.0, yMin: 10.0, yMax: 14.0, sMin: 5.0, sMax: 9.0, aspectMin: 0.34, aspectMax: 0.58, aMin: 0.38, aMax: 0.58, thMin: 0.06, thMax: 0.88 });
-    addLayer(1, 22, { rMin: 22.0, rMax: 36.0, yMin: 15.0, yMax: 20.0, sMin: 8.0, sMax: 15.0, aspectMin: 0.40, aspectMax: 0.66, aMin: 0.34, aMax: 0.52, thMin: 0.04, thMax: 0.88 });
-    addLayer(1, 18, { rMin: 38.0, rMax: 62.0, yMin: 8.0, yMax: 14.0, sMin: 12.0, sMax: 24.0, aspectMin: 0.28, aspectMax: 0.46, aMin: 0.42, aMax: 0.64, thMin: 0.04, thMax: 0.85 });
-    addLayer(2, 24, { rMin: 26.0, rMax: 45.0, yMin: 22.0, yMax: 30.0, sMin: 14.0, sMax: 26.0, aspectMin: 0.22, aspectMax: 0.44, aMin: 0.18, aMax: 0.32, thMin: 0.04, thMax: 0.9 });
-    addLayer(3, 14, { rMin: 30.0, rMax: 55.0, yMin: -2.0, yMax: 3.0, sMin: 20.0, sMax: 36.0, aspectMin: 0.42, aspectMax: 0.65, aMin: 0.28, aMax: 0.44, thMin: 0, thMax: 0 });
+    addLayer(0, 16, { rMin: 26.0, rMax: 46.0, yMin: 25.0, yMax: 37.0, sMin: 8.0, sMax: 15.0, aspectMin: 0.42, aspectMax: 0.66, aMin: 0.22, aMax: 0.38, thMin: 0.05, thMax: 0.86 });
+    addLayer(0, 12, { rMin: 46.0, rMax: 78.0, yMin: 18.0, yMax: 28.0, sMin: 13.0, sMax: 23.0, aspectMin: 0.34, aspectMax: 0.52, aMin: 0.30, aMax: 0.46, thMin: 0.04, thMax: 0.88 });
+    addLayer(0, 30, { rMin: 48.0, rMax: 92.0, yMin: 9.0, yMax: 22.0, sMin: 14.0, sMax: 26.0, aspectMin: 0.30, aspectMax: 0.50, aMin: 0.34, aMax: 0.54, thMin: 0.02, thMax: 0.90 });
+    addLayer(1, 26, { rMin: 32.0, rMax: 56.0, yMin: 28.0, yMax: 40.0, sMin: 13.0, sMax: 24.0, aspectMin: 0.36, aspectMax: 0.60, aMin: 0.26, aMax: 0.44, thMin: 0.05, thMax: 0.88 });
+    addLayer(1, 10, { rMin: 55.0, rMax: 85.0, yMin: 10.0, yMax: 18.0, sMin: 24.0, sMax: 40.0, aspectMin: 0.26, aspectMax: 0.42, aMin: 0.34, aMax: 0.52, thMin: 0.04, thMax: 0.80 });
+    addLayer(2, 16, { rMin: 44.0, rMax: 78.0, yMin: 42.0, yMax: 62.0, sMin: 24.0, sMax: 42.0, aspectMin: 0.30, aspectMax: 0.50, aMin: 0.16, aMax: 0.28, thMin: 0.04, thMax: 0.9 });
 
     const vao = gl.createVertexArray();
     gl.bindVertexArray(vao);
@@ -1791,17 +1816,17 @@ void main(){
   WS.prototype._makeRain = function () {
     const gl = this.gl;
     const R = rng(77031);
-    const N = 4200;
+    const N = 2800;
     const seeds = new Float32Array(N * 4);
     const speeds = new Float32Array(N);
     for (let i = 0; i < N; i++) {
       const a = R() * Math.PI * 2;
-      const r = Math.sqrt(R()) * 11.0;
+      const r = Math.sqrt(R()) * 21.0;
       seeds[i * 4] = Math.cos(a) * r;
       seeds[i * 4 + 1] = Math.sin(a) * r;
-      seeds[i * 4 + 2] = 11.0 + R() * 1.5;
+      seeds[i * 4 + 2] = 25.0 + R() * 1.5;
       seeds[i * 4 + 3] = R();
-      speeds[i] = 0.55 + R() * 0.9;
+      speeds[i] = 0.55 + R() * 0.85;
     }
     const vao = gl.createVertexArray();
     gl.bindVertexArray(vao);
@@ -1819,13 +1844,14 @@ void main(){
     const gl = this.gl;
     const R = rng(90311);
     const centers = [], data = [];
-    const pondX = 4.18, pondZ = 2.55;
-    const pondY = terrainH(pondX, pondZ);
-    for (let i = 0; i < 46; i++) {
-      const a = R() * Math.PI * 2;
-      const r = 0.10 + Math.sqrt(R()) * 1.02;
-      centers.push(pondX + Math.cos(a) * r, pondY + 0.024, pondZ + Math.sin(a) * r);
-      data.push(R(), 0.22 + R() * 0.62);
+    const spots = (this.puddles && this.puddles.length) ? this.puddles : [[2.4, 0.022, 1.4, 1.15]];
+    for (const p of spots) {
+      for (let j = 0; j < 5; j++) {
+        const a = R() * Math.PI * 2;
+        const r = (0.08 + Math.sqrt(R()) * 0.72) * (p[3] || 1.0);
+        centers.push(p[0] + Math.cos(a) * r, 0.030, p[2] + Math.sin(a) * r);
+        data.push(R(), 0.20 + R() * 0.58);
+      }
     }
     const vao = gl.createVertexArray();
     gl.bindVertexArray(vao);
@@ -1947,9 +1973,9 @@ void main(){
   WS.prototype.setView = function (n) {
     this.view = clamp(n | 0, 0, 2);
     const presets = [
-      { az: 0.72, el: 0.26, dist: 22.0, tx: 0, ty: 4.5, tz: 0 },
-      { az: 0.48, el: 0.10, dist: 18.0, tx: 0, ty: 9.0, tz: 0 },
-      { az: 0.94, el: 0.05, dist: 13.0, tx: 0, ty: 1.6, tz: 0 }
+      { az: 0.72, el: 0.10, dist: 74.0, tx: 0, ty: 17.0, tz: -6.0 },
+      { az: 0.55, el: 0.38, dist: 58.0, tx: 0, ty: 32.0, tz: -6.0 },
+      { az: 0.86, el: 0.07, dist: 28.0, tx: 0, ty: 7.0, tz: 0 }
     ];
     const p = presets[this.view];
     this.camGoal = { ...p };
@@ -1985,7 +2011,7 @@ void main(){
         const pts = [...this.pointers.values()];
         const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
         if (this.pinchDist > 0) {
-          this.camGoal.dist = clamp(this.camGoal.dist * (this.pinchDist / Math.max(d, 1)), 9.0, 34.0);
+          this.camGoal.dist = clamp(this.camGoal.dist * (this.pinchDist / Math.max(d, 1)), 20.0, 90.0);
         }
         this.pinchDist = d;
         return;
@@ -2011,7 +2037,7 @@ void main(){
     c.addEventListener("pointercancel", end);
     c.addEventListener("wheel", e => {
       e.preventDefault();
-      this.camGoal.dist = clamp(this.camGoal.dist * Math.exp(e.deltaY * 0.0011), 9.0, 34.0);
+      this.camGoal.dist = clamp(this.camGoal.dist * Math.exp(e.deltaY * 0.0011), 20.0, 90.0);
       this.userHold = 3.5;
     }, { passive: false });
     window.addEventListener("resize", () => {
@@ -2038,7 +2064,7 @@ void main(){
     const target = [this.cam.tx, this.cam.ty, this.cam.tz];
     const view = mat4(), proj = mat4();
     look(view, eye, target, [0, 1, 0]);
-    persp(proj, 42 * D2R, this.width / Math.max(1, this.height), 0.08, 180);
+    persp(proj, 46 * D2R, this.width / Math.max(1, this.height), 0.10, 240);
     m4mul(this.lastVP, proj, view);
     this.lastView = view;
     this.lastProj = proj;
@@ -2127,8 +2153,8 @@ void main(){
     let fogColor = mixV(nightFog, dayFog, day);
     fogColor = mixV(fogColor, [0.27, 0.14, 0.07], twilight * 0.16);
 
-    const skyAmb = mixV([0.016, 0.024, 0.042], [0.17, 0.215, 0.27], day);
-    const groundAmb = mixV([0.008, 0.011, 0.016], [0.105, 0.115, 0.095], day);
+    const skyAmb = mixV([0.040, 0.050, 0.070], [0.17, 0.215, 0.27], day);
+    const groundAmb = mixV([0.024, 0.028, 0.036], [0.105, 0.115, 0.095], day);
     const moonColor = [0.052 * (1 - day), 0.076 * (1 - day), 0.120 * (1 - day)];
 
     const litDay = mulV(mixV([0.72, 0.76, 0.80], [0.57, 0.60, 0.62], cloudFrac * 0.6), 0.72 + 0.4 * lightK);
@@ -2142,14 +2168,14 @@ void main(){
     const skySunColor = [mix(2.9, 3.4, 1 - smoothstep(0.0, 0.35, alt)), mix(2.45, 1.55, 1 - smoothstep(0.0, 0.35, alt)), mix(1.85, 0.7, 1 - smoothstep(0.0, 0.35, alt))];
 
     const lightView = mat4(), lightProj = mat4();
-    const center = [0, 1.1, 0];
-    const eye = add3(center, mul3(lightDir, 21));
+    const center = [0, 10.0, 0];
+    const eye = add3(center, mul3(lightDir, 58));
     const up = Math.abs(lightDir[1]) > 0.94 ? [1, 0, 0] : [0, 1, 0];
     look(lightView, eye, center, up);
-    ortho(lightProj, -10.8, 10.8, -10.8, 10.8, 1.0, 46);
+    ortho(lightProj, -34.0, 34.0, -34.0, 34.0, 1.0, 112);
     m4mul(this.lightVP, lightProj, lightView);
 
-    const fogDen = DBG.has("nofog") ? 0 : 0.0085 + cloudFrac * 0.005 + this.fx.rain * 0.008 + (1 - day) * 0.0035;
+    const fogDen = DBG.has("nofog") ? 0 : 0.0038 + cloudFrac * 0.0025 + this.fx.rain * 0.005 + (1 - day) * 0.0012;
     const exposure = 0.94 + (1 - day) * 0.78 + (1 - lightK) * 0.05;
     const overcast = clamp(Math.max(cloudFrac, this.fx.rain * 0.75), 0, 1);
 
@@ -2188,12 +2214,13 @@ void main(){
     gl.uniform1f(U.uWet, this.fx.wet);
     gl.uniform1f(U.uSnow, this.fx.snow);
     gl.uniform1f(U.uAlpha, 1.0);
+    gl.uniform1f(U.uDay, s.day);
     gl.uniform1i(U.uLampCount, 4);
     gl.uniformMatrix4fv(U.uLightVP, false, this.lightVP);
     gl.uniform1f(U.uShadowOn, s.shadowOnValue);
 
     const lp = new Float32Array(12), lc = new Float32Array(12), lw = new Float32Array(4);
-    const nightLamp = 0.25 + 1.75 * (1 - s.day);
+    const nightLamp = 0.05 + 1.95 * (1 - s.day);
     for (let i = 0; i < 4; i++) {
       const p = this.lampPositions[i] || [0, 0, 0, 1];
       lp[i * 3] = p[0]; lp[i * 3 + 1] = p[1]; lp[i * 3 + 2] = p[2];
@@ -2263,7 +2290,7 @@ void main(){
       gl.useProgram(this.P.shadow);
       gl.uniformMatrix4fv(this.U.shadow.uLightVP, false, this.lightVP);
       for (const b of this.batches) {
-        if (b.name === "glass" || b.name === "light" || b.name === "water") continue;
+        if (b.name === "glass" || b.name === "light" || b.name === "water" || b.name === "uv") continue;
         gl.bindVertexArray(b.vao);
         gl.drawArrays(gl.TRIANGLES, 0, b.count);
       }
@@ -2284,8 +2311,15 @@ void main(){
     gl.enable(gl.DEPTH_TEST);
     gl.depthMask(true);
     this._sceneUniforms();
+    const lightBatch = this.batches.find(b => b.name === "light");
+    if (lightBatch) lightBatch.mat.emissive = 0.05 + 2.55 * (1 - s.day);
+    const uvBatch = this.batches.find(b => b.name === "uv");
+    const uvK = clamp((Number(this.env && this.env.uv) || 0) / 11, 0, 1);
+    if (uvBatch) uvBatch.mat.emissive = uvK * 3.1;
     for (const b of this.batches) {
       if (b.name === "glass") continue;
+      if (b.name === "water" && this.fx.wet < 0.055) continue;
+      if (b.name === "uv" && uvK < 0.05) continue;
       this._drawBatch(b, b.name === "water");
     }
 
@@ -2302,7 +2336,7 @@ void main(){
     gl.uniform1f(cu.uLow, cov.low);
     gl.uniform1f(cu.uMid, cov.mid);
     gl.uniform1f(cu.uHigh, cov.high);
-    gl.uniform1f(cu.uSea, 1.0);
+    gl.uniform1f(cu.uSea, 0.0);
     gl.uniform1f(cu.uTime, this.time);
     gl.uniform3fv(cu.uCloudLit, s.cloudLit);
     gl.uniform3fv(cu.uCloudShade, s.cloudShade);
@@ -2338,7 +2372,7 @@ void main(){
       gl.uniform1f(pu.uTime, this.time);
       gl.uniform1f(pu.uRain, this.fx.rain);
       gl.bindVertexArray(this.ripples.vao);
-      const dropCount = Math.min(this.ripples.count, Math.round(6 + this.fx.rain * 40));
+      const dropCount = Math.min(this.ripples.count, Math.round(5 + this.fx.rain * 55));
       gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, dropCount);
     }
 
@@ -2393,10 +2427,10 @@ void main(){
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, T.bloomA);
     gl.uniform1i(this.U.comp.uBloom, 1);
-    gl.uniform1f(this.U.comp.uBloomAmt, DBG.has("nobloom") ? 0 : 0.58);
+    gl.uniform1f(this.U.comp.uBloomAmt, DBG.has("nobloom") ? 0 : 0.44);
     gl.uniform1f(this.U.comp.uExposure, s.exposure);
     gl.uniform1f(this.U.comp.uVignette, 0.38);
-    gl.uniform1f(this.U.comp.uGrain, 0.035);
+    gl.uniform1f(this.U.comp.uGrain, 0.022);
     gl.uniform1f(this.U.comp.uTime, this.time);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindVertexArray(this.fsVAO);
@@ -2491,9 +2525,7 @@ void main(){
     demoHour: forcedHour,
     formatters: null,
     lastClock: 0,
-    lastEnvUI: 0,
-    tlIndex: -1,
-    tlActive: false
+    lastEnvUI: 0
   };
 
   let scene = null;
@@ -2700,8 +2732,7 @@ void main(){
       hourly: "temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,rain,showers,snowfall,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,uv_index,shortwave_radiation,direct_radiation,diffuse_radiation,weather_code,is_day,visibility",
       daily: "sunrise,sunset,uv_index_max,precipitation_sum,daylight_duration",
       timezone: "auto",
-      forecast_days: "4",
-      past_days: "3",
+      forecast_days: "2",
       temperature_unit: "celsius",
       wind_speed_unit: "ms",
       precipitation_unit: "mm"
@@ -2803,28 +2834,17 @@ void main(){
       longitude: num(j.longitude, state.place.longitude),
       timezone: j.timezone || state.place.timezone || "Asia/Shanghai"
     };
-    const fullHourly = {
-      time: times,
-      precipitation: hourly.precipitation || [],
-      temperature_2m: hourly.temperature_2m || [],
-      humidity: hourly.relative_humidity || [],
-      cloud_cover: hourly.cloud_cover || [],
-      cloud_cover_low: hourly.cloud_cover_low || [],
-      cloud_cover_mid: hourly.cloud_cover_mid || [],
-      cloud_cover_high: hourly.cloud_cover_high || [],
-      uv_index: hourly.uv_index || [],
-      shortwave_radiation: hourly.shortwave_radiation || [],
-      weather_code: hourly.weather_code || [],
-      is_day: hourly.is_day || [],
-      wind_speed: hourly.wind_speed_10m || [],
-      wind_direction: hourly.wind_direction_10m || []
-    };
     return {
       place,
       env,
       chart,
-      hourly: fullHourly,
-      currentIdx: idx,
+      hourly: {
+        time: times,
+        precipitation: hourly.precipitation || [],
+        temperature_2m: hourly.temperature_2m || [],
+        uv_index: hourly.uv_index || [],
+        shortwave_radiation: hourly.shortwave_radiation || []
+      },
       daily,
       currentTime: cur.time || "",
       fetchedAt: Date.now(),
@@ -3085,11 +3105,6 @@ void main(){
     updateMarkerText();
     drawChart();
     updateRefreshLabel();
-    const tlSlider = $("#tlSlider");
-    if (tlSlider && state.hourly && state.hourly.time) {
-      tlSlider.max = Math.max(119, state.hourly.time.length - 1);
-      tlSlider.value = state.currentIdx || 0;
-    }
     document.title = `${Math.round(e.temp)}° ${e.condition} · ${state.place.name} — ATMOS° 实时天气`;
   }
 
@@ -3280,10 +3295,10 @@ void main(){
   }
 
   const MARKER_ANCHORS = {
-    rain: [5.2, 1.2, 3.2],
-    cloud: [0, 7.5, 0],
-    uv: [0, 10.0, 0],
-    light: [0, 11.5, 0]
+    rain: [3.05, 2.45, 1.35],
+    cloud: [-3.6, 7.1, -2.0],
+    uv: [1.62, 4.7, -0.55],
+    light: [-2.25, 5.7, -1.45]
   };
 
   function updateMarkers() {
@@ -3295,7 +3310,8 @@ void main(){
     for (const m of MARKERS) {
       const el = markerEls[m.id];
       if (!el) continue;
-      const p = scene.projectPoint(MARKER_ANCHORS[m.id]);
+      const anchor = (scene.anchors && scene.anchors[m.id]) || MARKER_ANCHORS[m.id];
+      const p = scene.projectPoint(anchor);
       if (!p || !p.visible || p.x < -80 || p.x > W + 80 || p.y < -40 || p.y > H + 40) {
         el.classList.remove("on");
         continue;
@@ -3484,100 +3500,6 @@ void main(){
     if (state.labels) updateMarkers();
   }
 
-
-  /* ------------------------------------------------------------------ */
-  /* timeline                                                            */
-  /* ------------------------------------------------------------------ */
-  function envFromHourlyIdx(idx) {
-    const h = state.hourly;
-    if (!h || !h.time || !h.time.length) return null;
-    const i = Math.max(0, Math.min(h.time.length - 1, idx));
-    const at = (arr) => (Array.isArray(arr) ? num(arr[i], 0) : 0);
-    const code = at(h.weather_code);
-    const info = weatherInfo(code);
-    const temp = at(h.temperature_2m);
-    const precip = at(h.precipitation);
-    const cloud = clamp(at(h.cloud_cover), 0, 100);
-    const isDay = Number(at(h.is_day)) === 1;
-    return {
-      temp,
-      apparent: temp,
-      humidity: clamp(at(h.humidity), 0, 100),
-      precipitation: precip,
-      rainRate: Math.max(precip * 4, at(h.precipitation)),
-      rainNext: at(h.precipitation),
-      rainTotal24: 0,
-      dailyRain: 0,
-      cloud,
-      cloudLow: clamp(at(h.cloud_cover_low), 0, 100),
-      cloudMid: clamp(at(h.cloud_cover_mid), 0, 100),
-      cloudHigh: clamp(at(h.cloud_cover_high), 0, 100),
-      uv: Math.max(0, at(h.uv_index)),
-      uvMax: Math.max(0, at(h.uv_index)),
-      shortwave: Math.max(0, at(h.shortwave_radiation)),
-      isDay,
-      code,
-      condition: info.zh,
-      conditionEn: info.en,
-      group: info.group,
-      storm: info.group === "storm",
-      snow: info.group === "snow" || (temp <= 1.2 && precip > 0.02),
-      windSpeed: at(h.wind_speed),
-      windDir: at(h.wind_direction),
-      windGust: 0,
-      pressure: 1013,
-      visibility: 20000,
-      sunrise: "",
-      sunset: ""
-    };
-  }
-
-  function applyTimeline(idx) {
-    const env = envFromHourlyIdx(idx);
-    if (!env) return;
-    state.tlIndex = idx;
-    state.tlActive = true;
-    state.env = env;
-    if (scene) scene.setEnvironment(env);
-    renderWeatherUI();
-    // update slider label
-    const h = state.hourly;
-    if (h && h.time && h.time[idx]) {
-      const t = String(h.time[idx]);
-      const d = t.slice(5, 10).replace("-", "/");
-      const tm = t.slice(11, 16);
-      const nowIdx = state.currentIdx || Math.floor(h.time.length / 2);
-      const diff = idx - nowIdx;
-      let rel;
-      if (diff === 0) rel = "· 现在";
-      else if (diff < 0) rel = `· ${-diff}h 前`;
-      else rel = `· ${diff}h 后`;
-      setText("tlInfo", `${d} ${tm} ${rel}`);
-    }
-    const btn = $("#tlNow");
-    if (btn) btn.classList.add("active");
-  }
-
-  function resetTimeline() {
-    state.tlActive = false;
-    state.tlIndex = -1;
-    const h = state.hourly;
-    if (h && state.currentIdx != null) {
-      const slider = $("#tlSlider");
-      if (slider) slider.value = state.currentIdx;
-      // restore current-time env from cached hourly
-      const env = envFromHourlyIdx(state.currentIdx);
-      if (env) {
-        state.env = env;
-        if (scene) scene.setEnvironment(env);
-        renderWeatherUI();
-      }
-    }
-    const btn = $("#tlNow");
-    if (btn) btn.classList.remove("active");
-    setText("tlInfo", "当前实时天气");
-  }
-
   function bindUI() {
     buildMarkers();
     const input = $("#cityInput");
@@ -3633,15 +3555,6 @@ void main(){
       $$(".tabs button").forEach(x => x.classList.toggle("on", x === b));
       drawChart();
     }));
-    // timeline
-    const tlSlider = $("#tlSlider");
-    if (tlSlider) {
-      tlSlider.addEventListener("input", () => {
-        applyTimeline(+tlSlider.value);
-      });
-    }
-    const tlNow = $("#tlNow");
-    if (tlNow) tlNow.addEventListener("click", resetTimeline);
     document.addEventListener("pointerdown", ev => {
       if (!ev.target.closest(".search-wrap")) hideSearch();
     });
@@ -3749,3 +3662,4 @@ void main(){
 </script>
 </body>
 </html>
+
