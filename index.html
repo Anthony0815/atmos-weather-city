@@ -53,6 +53,8 @@
   }
   .brand-mark:before{content:"";width:26px;height:1px;background:linear-gradient(90deg,transparent,var(--rain))}
   .brand-mark span{color:var(--rain);letter-spacing:0;font-size:13px;transform:translateY(-4px)}
+  .brand-mark .engine{font-weight:400}
+  .brand-mark em{font-style:normal;font-size:8px;letter-spacing:.12em;color:#c4dcea;border:1px solid rgba(126,186,214,.34);border-radius:2px;padding:2px 5px;margin-left:8px;background:rgba(6,18,28,.38)}
   .brand h1{font-size:25px;font-weight:500;letter-spacing:.05em;margin-top:11px;line-height:1.15;text-shadow:0 4px 26px rgba(0,0,0,.55)}
   .brand p{font-size:9px;letter-spacing:.31em;color:#7892a4;margin-top:8px;font-weight:400}
   .top-right{display:flex;flex-direction:column;align-items:flex-end;gap:14px;pointer-events:auto}
@@ -231,6 +233,7 @@
     .brand h1{font-size:19px;margin-top:8px}
     .brand p{display:none}
     .brand-mark{font-size:9px}
+    .brand-mark .engine{display:none}
     .clock{font-size:34px}
     .clock-panel{min-width:0}
     .status-line{display:none}
@@ -299,7 +302,7 @@
 <div id="hud">
   <header class="top">
     <div class="brand">
-      <div class="brand-mark">ATMOS<span>°</span> / WEATHER ENGINE</div>
+      <div class="brand-mark">ATMOS<span>°</span><b class="engine"> / WEATHER ENGINE</b><em>V3.0.0</em></div>
       <h1>实时天气 · 三维映射</h1>
       <p>LIVE WEATHER, RENDERED IN REAL TIME</p>
     </div>
@@ -1254,6 +1257,7 @@
       this.lastView = m4();
       this.lastProj = m4();
       this.fx = { rain: 0, cloud: 0, uv: 0, light: 0, wet: 0, snow: 0 };
+      this.snowCover = 0;
       this.fxTarget = { rain: 0, cloud: 0, uv: 0, light: 0, wet: 0, snow: 0 };
       this.world = buildWorld();
       this.batches = [];
@@ -1274,13 +1278,14 @@
 
     setEnvironment(e) {
       this.env = e ? { ...e } : null;
-      const rain = clamp((e?.rainRate || 0) / 9, 0, 1);
+      const snow = e?.snow ? clamp((e?.rainRate || 1.4) / 5.0, 0.28, 1) : 0;
+      const rain = snow ? 0 : clamp((e?.rainRate || 0) / 9, 0, 1);
       const cloud = clamp((e?.cloud || 0) / 100, 0, 1);
       const uv = clamp((e?.uv || 0) / 11, 0, 1);
       const light = clamp((e?.shortwave || 0) / 1000, 0, 1);
-      const snow = e?.snow ? 1 : 0;
-      const wet = rain > 0.015 ? clamp(0.35 + rain * 0.8, 0, 1) : (e?.rainTotal24 > 0.1 ? 0.25 : 0);
+      const wet = snow ? 0 : (rain > 0.015 ? clamp(0.35 + rain * 0.8, 0, 1) : (e?.rainTotal24 > 0.1 ? 0.25 : 0));
       this.fxTarget = { rain, cloud, uv, light, wet, snow };
+      if (snow) this.snowCover = Math.max(this.snowCover || 0, snow * 0.82);
     }
 
     projectPoint(p) {
@@ -1433,6 +1438,7 @@ uniform vec3 uGroundAmb;
 uniform vec3 uFogColor;
 uniform vec3 uMoonColor;
 uniform float uFogDen;
+uniform float uGroundFog;
 uniform float uWet;
 uniform float uSnow;
 uniform float uWater;
@@ -1524,13 +1530,16 @@ void main() {
   vec3 reflCol = mix(uSkyAmb * 1.8, uFogColor, 0.52) + uSunColor * pow(max(dot(reflDir, uSunDir), 0.0), 6.0) * 0.18;
   col = mix(col, reflCol, clamp(uReflect * (0.18 + 0.56 * fres), 0.0, 0.68));
 
+  vec3 cityLight = vec3(0.0);
   for (int i = 0; i < 4; i++) {
     if (i >= uLampCount) break;
     vec3 d = uLampPos[i] - vWorld;
     float dd = dot(d, d);
     float att = 1.0 / (1.0 + dd * 0.18);
     float nl = max(dot(N, normalize(d)), 0.0);
-    col += base * uLampColor[i] * uLampPower[i] * att * (0.16 + 0.84 * nl);
+    vec3 lampAdd = uLampColor[i] * uLampPower[i] * att * (0.16 + 0.84 * nl);
+    col += base * lampAdd;
+    cityLight += lampAdd;
   }
 
   float wetMask = uWet * (1.0 - smoothstep(0.15, 0.95, N.y));
@@ -1552,13 +1561,20 @@ void main() {
   col += base * uEmissive;
 
   if (uSnow > 0.001) {
-    vec3 snowLit = vec3(0.52, 0.57, 0.60) * (amb * 2.4 + light * 0.9);
-    col = mix(col, snowLit, uSnow * max(N.y, 0.0) * 0.58);
+    vec3 snowLit = vec3(0.78, 0.85, 0.93) * (amb * 2.8 + light * 1.15) + vec3(0.10, 0.12, 0.15) * (1.0 - uDay) + cityLight * 0.42 + vec3(0.035, 0.045, 0.062);
+    float sn = uSnow * smoothstep(-0.15, 0.55, abs(N.y));
+    col = mix(col, snowLit, clamp(sn * 0.86, 0.0, 0.88));
   }
 
+    float lowSnow = (1.0 - smoothstep(5.0, 8.0, vWorld.y)) * uSnow;
+  col = mix(col, vec3(0.72, 0.78, 0.88) + cityLight * 0.35, clamp(lowSnow * 0.95, 0.0, 0.78));
+
   float dist = length(uCamPos - vWorld);
-  float fog = 1.0 - exp(-uFogDen * dist);
-  col = mix(col, uFogColor, clamp(fog, 0.0, 0.92));
+  float hfog = exp(-max(vWorld.y, 0.0) * 0.075);
+  float fog = 1.0 - exp(-(uFogDen + uGroundFog * hfog * 0.032) * dist);
+  vec3 fogCol = uFogColor;
+  fogCol += uSunColor * pow(max(dot(normalize(vWorld - uCamPos), uSunDir), 0.0), 3.0) * 0.055;
+  col = mix(col, fogCol, clamp(fog, 0.0, 0.90));
   outColor = vec4(col, uAlpha);
 }`;
 
@@ -1663,11 +1679,24 @@ void main() {
 
   vec2 cuv = dir.xz / max(0.10, y + 0.16) * 3.1;
   float n = fbm2(cuv + vec2(uTime * 0.0035, uTime * 0.0012));
+  float n2 = fbm2(cuv * 2.35 - vec2(uTime * 0.0060, uTime * 0.0021) + 11.3);
+  float n3 = fbm2(cuv * 5.10 + vec2(uTime * 0.0090, 0.0) + 31.7);
   float cband = smoothstep(0.01, 0.07, y) * (1.0 - smoothstep(0.36, 0.86, y));
-  float cov = smoothstep(0.58 - 0.22 * uOvercast, 0.86 - 0.16 * uOvercast, n) * cband;
+  float nmix = n * 0.58 + n2 * 0.30 + n3 * 0.12;
+  float cov = smoothstep(0.57 - 0.22 * uOvercast, 0.85 - 0.16 * uOvercast, nmix) * cband;
+  float shade = smoothstep(0.22, 0.78, n2);
   vec3 cloudCol = mix(vec3(0.075, 0.090, 0.120), vec3(0.72, 0.77, 0.82), uDay);
   cloudCol = mix(cloudCol, uSunColor * 0.22, 0.30 * uDay);
+  cloudCol *= 0.86 + 0.24 * shade;
+  float sunNear = pow(max(dot(dir, uSunDir), 0.0), 10.0);
+  cloudCol += uSunColor * sunNear * 0.16 * uDay;
   col = mix(col, cloudCol, cov * (0.20 + 0.48 * uOvercast) * smoothstep(0.015, 0.10, uOvercast));
+
+  /* high thin cirrus catches the last light above the skyline */
+  float cir = smoothstep(0.54, 0.82, fbm2(vec2(cuv.x * 1.4, cuv.y * 4.2) + vec2(uTime * 0.002, 9.0)));
+  float cband2 = smoothstep(0.16, 0.30, y) * (1.0 - smoothstep(0.72, 0.98, y));
+  vec3 cirCol = mix(vec3(0.45, 0.54, 0.66), vec3(0.93, 0.86, 0.78), uTwilight * 0.55);
+  col += cirCol * cir * cband2 * (0.035 + 0.10 * uDay) * (0.4 + 0.6 * uOvercast);
 
   col = mix(col, uFogColor, smoothstep(0.18, 0.0, abs(y)) * 0.24);
   outColor = vec4(max(col, 0.0), 1.0);
@@ -1720,6 +1749,8 @@ uniform vec3 uCloudLit;
 uniform vec3 uCloudShade;
 uniform vec3 uSunColor;
 uniform float uDay;
+uniform vec3 uSunDir;
+uniform vec3 uFogColor;
 out vec4 outColor;
 
 float hash21(vec2 p) {
@@ -1746,11 +1777,21 @@ void main(){
   float mask = smoothstep(1.02, 0.2, r + (n - 0.5) * 0.72);
   float alpha = mask * (0.34 + 0.56 * n2) * vAlpha;
   if (alpha < 0.008) discard;
+  if (vLayer > 2.5) {
+    vec3 fc = mix(vec3(0.24, 0.30, 0.38), uFogColor, 0.58);
+    fc += uSunColor * 0.022 * (0.15 + 0.85 * uDay);
+    outColor = vec4(fc, alpha * 0.62);
+    return;
+  }
   float top = clamp(vUv.y * 0.5 + 0.5, 0.0, 1.0);
-  vec3 col = mix(uCloudShade, uCloudLit, 0.18 + 0.82 * top);
-  col += uSunColor * pow(max(0.0, 1.0 - r), 3.0) * 0.038 * (0.12 + 0.88 * uDay);
+  vec3 nrm = normalize(vec3(vUv.x * 0.60, 0.78, -vUv.y * 0.60));
+  float sl = max(dot(nrm, uSunDir), 0.0);
+  vec3 col = mix(uCloudShade, uCloudLit, 0.16 + 0.84 * top);
+  col = mix(col, uCloudLit * 1.06, smoothstep(-0.18, 0.62, sl) * 0.30);
+  col += uSunColor * pow(max(0.0, 1.0 - r), 5.0) * 0.10 * (0.12 + 0.88 * uDay);
   col += vec3(0.18, 0.10, 0.045) * (1.0 - uDay) * pow(max(0.0, 1.0 - r), 2.2) * 0.55;
   col += vec3(0.012, 0.018, 0.030) * pow(top, 1.6);
+  col *= 0.86 + 0.22 * n;
   outColor = vec4(col, alpha);
 }`;
 
@@ -1774,7 +1815,7 @@ void main(){
   float x = aSeed.x + uWind * fall * 1.5;
   vec3 p = vec3(x, y, aSeed.y);
   vec3 vel = normalize(vec3(uWind * 1.10 + 0.040, -1.0, 0.0));
-  float len = 0.30 + 0.28 * clamp(aSpeed, 0.0, 1.6);
+  float len = 0.22 + 0.20 * clamp(aSpeed, 0.0, 1.6);
   vec4 c1 = uVP * vec4(p, 1.0);
   vec4 c2 = uVP * vec4(p + vel * len, 1.0);
   vec2 s1 = c1.xy / max(c1.w, 0.001);
@@ -1804,8 +1845,8 @@ void main(){
   float ends = smoothstep(-1.0, -0.72, vUv.y) * smoothstep(1.0, 0.72, vUv.y);
   float a = across * ends * vAlpha;
   if (a < 0.012) discard;
-  vec3 col = mix(vec3(0.36, 0.46, 0.58), vec3(0.64, 0.74, 0.86), across);
-  outColor = vec4(col, a * 0.42);
+  vec3 col = mix(vec3(0.22, 0.30, 0.40), vec3(0.42, 0.52, 0.66), across);
+  outColor = vec4(col, a * 0.24);
 }`;
 
   const RIPPLE_VS = `#version 300 es
@@ -1837,6 +1878,49 @@ void main(){
   float ring = smoothstep(0.98, 0.74, r) * smoothstep(0.42, 0.63, r);
   if (ring < 0.015) discard;
   outColor = vec4(vec3(0.45, 0.62, 0.72), ring * vA * 0.22);
+}`;
+
+  const SNOW_VS = `#version 300 es
+precision highp float;
+layout(location=0) in vec2 aCorner;
+layout(location=1) in vec4 aSeed;
+layout(location=2) in float aSize;
+uniform mat4 uVP;
+uniform float uTime;
+uniform float uSnow;
+uniform float uWind;
+uniform vec3 uCamPos;
+uniform vec2 uRes;
+out vec2 vUv;
+out float vA;
+void main(){
+  float spd = 0.55 + aSize * 0.90;
+  float fall = fract(aSeed.w + uTime * 0.019 * spd);
+  float y = aSeed.z - fall * 44.0;
+  float sway = sin(uTime * 0.55 + aSeed.w * 31.0) * (1.0 + 2.4 * aSize) + uWind * fall * 12.0;
+  vec3 p = vec3(uCamPos.x + aSeed.x + sway, y, uCamPos.z + aSeed.y + cos(uTime * 0.47 + aSeed.w * 19.0) * 0.8);
+  vec4 clip = uVP * vec4(p, 1.0);
+  float dist = length(uCamPos - p);
+  float size = 0.15 + 0.22 * aSize;
+  float px = clamp(size * uRes.y / max(4.0, dist) * 1.7, 1.0, 5.0);
+  clip.xy += aCorner * (px / max(uRes.x, 1.0)) * 2.0 * clip.w;
+  vUv = aCorner;
+  float edge = min(smoothstep(0.0, 0.045, fall), smoothstep(1.0, 0.90, fall));
+  vA = uSnow * edge * (0.65 + 0.45 * aSize) * (1.0 - smoothstep(90.0, 150.0, dist)) * 0.42;
+  gl_Position = clip;
+}`;
+
+  const SNOW_FS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+in float vA;
+out vec4 outColor;
+void main(){
+  float d = length(vUv);
+  float a = smoothstep(1.0, 0.06, d) * vA;
+  if (a < 0.012) discard;
+  vec3 col = mix(vec3(0.60, 0.72, 0.86), vec3(1.0), smoothstep(0.55, 0.0, d));
+  outColor = vec4(col, a * 0.55);
 }`;
 
   const BRIGHT_FS = `#version 300 es
@@ -1875,11 +1959,14 @@ precision highp float;
 in vec2 vUv;
 uniform sampler2D uScene;
 uniform sampler2D uBloom;
+uniform vec2 uTexel;
 uniform float uBloomAmt;
 uniform float uExposure;
 uniform float uVignette;
 uniform float uGrain;
 uniform float uTime;
+uniform float uSnow;
+uniform vec2 uRes;
 out vec4 outColor;
 vec3 aces(vec3 x) {
   return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
@@ -1889,8 +1976,33 @@ float hash21(vec2 p) {
   p += dot(p, p + 45.32);
   return fract(p.x * p.y);
 }
+float snowField(vec2 uv) {
+  float acc = 0.0;
+  float aspect = uRes.x / max(1.0, uRes.y);
+  for (int i = 0; i < 3; i++) {
+    float fi = float(i);
+    float sc = 7.0 + fi * 9.0;
+    vec2 q = uv * vec2(aspect, 1.0) * sc;
+    q.y += uTime * (0.24 + 0.16 * fi);
+    q.x += uTime * 0.05 + sin(uTime * 0.33 + fi) * 0.40;
+    vec2 id = floor(q);
+    vec2 f = fract(q) - 0.5;
+    float h = hash21(id + fi * 17.13);
+    vec2 off = vec2(hash21(id + 3.71), hash21(id + 9.27)) - 0.5;
+    float d = length(f - off * 0.62);
+    float rad = 0.042 + 0.052 * h;
+    acc += smoothstep(rad, rad * 0.12, d) * step(0.50, h) * (0.34 + 0.22 * fi);
+  }
+  return acc;
+}
+
 void main(){
   vec3 c = texture(uScene, vUv).rgb;
+  vec3 nb = (texture(uScene, vUv + vec2(uTexel.x, 0.0)).rgb +
+             texture(uScene, vUv - vec2(uTexel.x, 0.0)).rgb +
+             texture(uScene, vUv + vec2(0.0, uTexel.y)).rgb +
+             texture(uScene, vUv - vec2(0.0, uTexel.y)).rgb) * 0.25;
+  c += (c - nb) * 0.18;
   vec3 b = texture(uBloom, vUv).rgb;
   c += b * uBloomAmt;
   c *= uExposure;
@@ -1901,6 +2013,8 @@ void main(){
   c = clamp((c - 0.5) * 1.06 + 0.5, 0.0, 1.0);
   float vig = smoothstep(1.30, 0.42, length((vUv - 0.5) * vec2(1.0, 1.12)));
   c *= mix(1.0, vig, uVignette);
+  float sf = snowField(vUv) * uSnow;
+  c = mix(c, vec3(0.93, 0.97, 1.0), clamp(sf * 1.15, 0.0, 0.78));
   float g = hash21(vUv * 913.0 + fract(uTime) * 37.0) - 0.5;
   c += g * uGrain;
   outColor = vec4(c, 1.0);
@@ -1982,6 +2096,7 @@ void main(){
       sky: program(gl, QUAD_VS, SKY_FS),
       cloud: program(gl, CLOUD_VS, CLOUD_FS),
       rain: program(gl, RAIN_VS, RAIN_FS),
+      snow: program(gl, SNOW_VS, SNOW_FS),
       ripple: program(gl, RIPPLE_VS, RIPPLE_FS),
       bright: program(gl, QUAD_VS, BRIGHT_FS),
       blur: program(gl, QUAD_VS, BLUR_FS),
@@ -1990,7 +2105,7 @@ void main(){
     this.U = {
       scene: uniformMap(gl, this.P.scene, [
         "uVP", "uModel", "uTime", "uWater", "uCamPos", "uSunDir", "uSunColor", "uSkyAmb", "uGroundAmb",
-        "uFogColor", "uMoonColor", "uFogDen", "uWet", "uSnow", "uEmissive", "uRough", "uMetal", "uAlpha", "uDay", "uDetail", "uReflect", "uWindowTint",
+        "uFogColor", "uMoonColor", "uFogDen", "uGroundFog", "uWet", "uSnow", "uEmissive", "uRough", "uMetal", "uAlpha", "uDay", "uDetail", "uReflect", "uWindowTint",
         "uLampCount", "uLampPos[0]", "uLampColor[0]", "uLampPower[0]", "uShadow", "uLightVP", "uShadowOn"
       ]),
       shadow: uniformMap(gl, this.P.shadow, ["uLightVP"]),
@@ -1999,18 +2114,20 @@ void main(){
         "uSunDir", "uMoonDir", "uSunColor", "uZenithDay", "uHorizonDay", "uZenithNight", "uHorizonNight",
         "uFogColor", "uUV", "uOvercast"
       ]),
-      cloud: uniformMap(gl, this.P.cloud, ["uVP", "uCamRight", "uCamUp", "uLow", "uMid", "uHigh", "uSea", "uTime", "uCloudLit", "uCloudShade", "uSunColor", "uDay"]),
+      cloud: uniformMap(gl, this.P.cloud, ["uVP", "uCamRight", "uCamUp", "uLow", "uMid", "uHigh", "uSea", "uTime", "uCloudLit", "uCloudShade", "uSunColor", "uDay", "uSunDir", "uFogColor"]),
       rain: uniformMap(gl, this.P.rain, ["uVP", "uTime", "uRain", "uWind", "uCamPos", "uRes", "uScale"]),
+      snow: uniformMap(gl, this.P.snow, ["uVP", "uTime", "uSnow", "uWind", "uCamPos", "uRes"]),
       ripple: uniformMap(gl, this.P.ripple, ["uVP", "uTime", "uRain"]),
       bright: uniformMap(gl, this.P.bright, ["uTex", "uThreshold"]),
       blur: uniformMap(gl, this.P.blur, ["uTex", "uTexel", "uDir"]),
-      comp: uniformMap(gl, this.P.comp, ["uScene", "uBloom", "uBloomAmt", "uExposure", "uVignette", "uGrain", "uTime"])
+      comp: uniformMap(gl, this.P.comp, ["uScene", "uBloom", "uBloomAmt", "uExposure", "uVignette", "uGrain", "uTime", "uTexel", "uSnow", "uRes"])
     };
 
     this._initQuad();
     this._makeBatches();
     this._makeClouds();
     this._makeRain();
+    this._makeSnow();
     this._makeRipples();
     this._makeShadowTarget();
     this._initEvents();
@@ -2091,6 +2208,7 @@ void main(){
     addLayer(1, 26, { rMin: 32.0, rMax: 56.0, yMin: 28.0, yMax: 40.0, sMin: 13.0, sMax: 24.0, aspectMin: 0.36, aspectMax: 0.60, aMin: 0.26, aMax: 0.44, thMin: 0.05, thMax: 0.88 });
     addLayer(1, 10, { rMin: 55.0, rMax: 85.0, yMin: 10.0, yMax: 18.0, sMin: 24.0, sMax: 40.0, aspectMin: 0.26, aspectMax: 0.42, aMin: 0.34, aMax: 0.52, thMin: 0.04, thMax: 0.80 });
     addLayer(2, 16, { rMin: 44.0, rMax: 78.0, yMin: 42.0, yMax: 62.0, sMin: 24.0, sMax: 42.0, aspectMin: 0.30, aspectMax: 0.50, aMin: 0.16, aMax: 0.28, thMin: 0.04, thMax: 0.9 });
+    addLayer(3, 18, { rMin: 8.0, rMax: 38.0, yMin: 0.6, yMax: 6.5, sMin: 16.0, sMax: 32.0, aspectMin: 0.10, aspectMax: 0.22, aMin: 0.045, aMax: 0.10, thMin: 0.02, thMax: 0.92 });
 
     const vao = gl.createVertexArray();
     gl.bindVertexArray(vao);
@@ -2146,6 +2264,38 @@ void main(){
     gl.vertexAttribDivisor(2, 1);
     gl.bindVertexArray(null);
     this.rain = { vao, count: N, seeds, speeds, qb, b1, b2 };
+  };
+
+  WS.prototype._makeSnow = function () {
+    const gl = this.gl;
+    const R = rng(61807);
+    const N = 2400;
+    const seeds = new Float32Array(N * 4);
+    const sizes = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      const a = R() * Math.PI * 2;
+      const r = Math.sqrt(R()) * 52.0;
+      seeds[i * 4] = Math.cos(a) * r;
+      seeds[i * 4 + 1] = Math.sin(a) * r;
+      seeds[i * 4 + 2] = 34.0 + R() * 12.0;
+      seeds[i * 4 + 3] = R();
+      sizes[i] = R();
+    }
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    makeBuf(gl, new Float32Array([-1,-1, 1,-1, 1,1, -1,-1, 1,1, -1,1]));
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    makeBuf(gl, seeds);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(1, 1);
+    makeBuf(gl, sizes);
+    gl.enableVertexAttribArray(2);
+    gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(2, 1);
+    gl.bindVertexArray(null);
+    this.snow = { vao, count: N };
   };
 
   WS.prototype._makeRipples = function () {
@@ -2514,7 +2664,7 @@ void main(){
     ortho(lightProj, -34.0, 34.0, -34.0, 34.0, 1.0, 112);
     m4mul(this.lightVP, lightProj, lightView);
 
-    const fogDen = DBG.has("nofog") ? 0 : 0.0038 + cloudFrac * 0.0025 + this.fx.rain * 0.005 + (1 - day) * 0.0012;
+    const fogDen = DBG.has("nofog") ? 0 : 0.0032 + cloudFrac * 0.0018 + this.fx.rain * 0.006 + this.fx.snow * 0.004 + (1 - day) * 0.0012;
     const exposure = 0.94 + (1 - day) * 0.78 + (1 - lightK) * 0.05;
     const overcast = clamp(Math.max(cloudFrac, this.fx.rain * 0.75), 0, 1);
 
@@ -2526,10 +2676,11 @@ void main(){
       low = cloudFrac * 0.46; mid = cloudFrac * 0.30; high = cloudFrac * 0.24;
     }
 
+    const groundFog = 0.08 + this.fx.rain * 0.80 + this.fx.snow * 0.55 + (1 - day) * 0.15;
     this.sun = {
       alt, day, twilight, skySunDir: sp.dir, moonDir, lightDir, lightColor, shadowOn,
       skySunColor, zenithDay, horizonDay, zenithNight, horizonNight,
-      fogColor, fogDen, skyAmb, groundAmb, moonColor, cloudLit, cloudShade, exposure, cloudFrac, overcast,
+      fogColor, fogDen, skyAmb, groundAmb, moonColor, cloudLit, cloudShade, exposure, cloudFrac, overcast, groundFog,
       shadowOnValue: shadowOn ? 1 : 0
     };
     this.cloudCoverage = { low, mid, high };
@@ -2551,7 +2702,8 @@ void main(){
     gl.uniform3fv(U.uMoonColor, s.moonColor);
     gl.uniform1f(U.uFogDen, s.fogDen);
     gl.uniform1f(U.uWet, this.fx.wet);
-    gl.uniform1f(U.uSnow, this.fx.snow);
+    gl.uniform1f(U.uSnow, Math.max(this.fx.snow * 0.80, this.snowCover || 0));
+    gl.uniform1f(U.uGroundFog, s.groundFog || 0);
     gl.uniform1f(U.uAlpha, 1.0);
     gl.uniform1f(U.uDay, s.day);
     gl.uniform1i(U.uLampCount, 4);
@@ -2691,7 +2843,10 @@ void main(){
     gl.uniform1f(cu.uLow, cov.low);
     gl.uniform1f(cu.uMid, cov.mid);
     gl.uniform1f(cu.uHigh, cov.high);
-    gl.uniform1f(cu.uSea, 0.0);
+    const fogCoverage = clamp(this.fx.rain * 0.92 + this.fx.snow * 0.82 - 0.03, 0, 1);
+    gl.uniform1f(cu.uSea, fogCoverage);
+    gl.uniform3fv(cu.uSunDir, s.lightDir);
+    gl.uniform3fv(cu.uFogColor, s.fogColor);
     gl.uniform1f(cu.uTime, this.time);
     gl.uniform3fv(cu.uCloudLit, s.cloudLit);
     gl.uniform3fv(cu.uCloudShade, s.cloudShade);
@@ -2702,7 +2857,7 @@ void main(){
 
     /* rain */
     if (this.fx.rain > 0.012) {
-      const rn = Math.min(this.rain.count, Math.floor(this.rain.count * clamp(0.07 + 0.93 * Math.pow(this.fx.rain, 0.62), 0, 1)));
+      const rn = Math.min(this.rain.count, Math.floor(this.rain.count * clamp(0.04 + 0.68 * Math.pow(this.fx.rain, 0.62), 0, 1)));
       if (rn > 0) {
         const windRad = (Number(this.env?.windDir) || 0) * D2R;
         const wind = clamp((Number(this.env?.windSpeed) || 0) / 22, 0, 1.2) * Math.sin(windRad);
@@ -2717,6 +2872,25 @@ void main(){
         gl.uniform1f(ru.uScale, clamp(this.pixelRatio, 1, 2));
         gl.bindVertexArray(this.rain.vao);
         gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, rn);
+      }
+    }
+
+    /* snow */
+    if (this.fx.snow > 0.012) {
+      const sn = Math.min(this.snow.count, Math.floor(this.snow.count * clamp(this.fx.snow * 0.94, 0, 1)));
+      if (sn > 0) {
+        const windRadS = (Number(this.env?.windDir) || 0) * D2R;
+        const windS = clamp((Number(this.env?.windSpeed) || 0) / 16, 0, 1.1) * Math.sin(windRadS);
+        gl.useProgram(this.P.snow);
+        const su = this.U.snow;
+        gl.uniformMatrix4fv(su.uVP, false, this.lastVP);
+        gl.uniform1f(su.uTime, this.time);
+        gl.uniform1f(su.uSnow, this.fx.snow);
+        gl.uniform1f(su.uWind, windS);
+        gl.uniform3fv(su.uCamPos, this.cameraPos);
+        gl.uniform2f(su.uRes, gl.drawingBufferWidth, gl.drawingBufferHeight);
+        gl.bindVertexArray(this.snow.vao);
+        gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, sn);
       }
     }
 
@@ -2794,6 +2968,9 @@ void main(){
     gl.uniform1f(this.U.comp.uVignette, 0.38);
     gl.uniform1f(this.U.comp.uGrain, 0.022);
     gl.uniform1f(this.U.comp.uTime, this.time);
+    gl.uniform2f(this.U.comp.uTexel, 1.0 / T.w, 1.0 / T.h);
+    gl.uniform1f(this.U.comp.uSnow, this.fx.snow);
+    gl.uniform2f(this.U.comp.uRes, T.w, T.h);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindVertexArray(this.fsVAO);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -2873,6 +3050,9 @@ void main(){
     f.light += (t.light - f.light) * kFast;
     f.wet += (t.wet - f.wet) * kSlow;
     f.snow += (t.snow - f.snow) * kSlow;
+    const snowTarget = t.snow > 0.02 ? clamp(0.28 + t.snow * 0.72, 0, 1) : 0;
+    const snowK = t.snow > (this.snowCover || 0) ? 0.10 : 0.015;
+    this.snowCover = (this.snowCover || 0) + (snowTarget - (this.snowCover || 0)) * (1 - Math.exp(-d * snowK));
     this._updateSun(now);
     this._updateCars(d);
     this._updateCamera(d, now);
@@ -3277,13 +3457,14 @@ void main(){
       const t = new Date(base.getTime() + i * 3600 * 1000);
       times.push(isoLocal(t));
     }
-    const k = kind === "day" ? "day" : kind === "night" ? "night" : "rain";
+    const k = kind === "snow" ? "snow" : kind === "day" ? "day" : kind === "night" ? "night" : "rain";
     const rainCurve = [5.8, 6.4, 5.1, 3.6, 2.1, 1.2, 0.6, 0.3, 0.2, 0.1, 0.1, 0, 0, 0, 0, 0, 0, 0, 0.2, 0.5, 0.9, 1.4, 1.1, 0.7, 0.4, 0.2, 0.1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     const tempCurve = [18.4, 18.1, 17.8, 17.5, 17.2, 17.0, 16.9, 17.2, 18.0, 19.1, 20.2, 21.2, 22.1, 22.8, 23.2, 23.4, 23.1, 22.5, 21.8, 21.0, 20.2, 19.5, 19.0, 18.6, 18.2, 17.9, 17.6, 17.3, 17.0, 16.8, 16.6, 16.5, 16.8, 17.4, 18.2, 19.0, 19.8, 20.5, 21.0, 21.4, 21.6, 21.4, 20.9, 20.2, 19.5, 18.9, 18.4, 18.0];
     const isNight = k === "night";
-    const rain = times.map((t, i) => (k === "rain" ? rainCurve[i] : 0));
-    const cloudBase = k === "rain" ? 94 : k === "night" ? 14 : 38;
-    const cloud = times.map((t, i) => clamp(cloudBase + Math.sin(i * 0.42) * (k === "rain" ? 5 : 12) + (i < 7 && k === "rain" ? 4 : 0), 0, 100));
+    const snowy = k === "snow";
+    const rain = times.map((t, i) => (k === "rain" || snowy ? rainCurve[i] * (snowy ? 0.52 : 1) : 0));
+    const cloudBase = k === "rain" || snowy ? 94 : k === "night" ? 14 : 38;
+    const cloud = times.map((t, i) => clamp(cloudBase + Math.sin(i * 0.42) * (k === "rain" || snowy ? 5 : 12) + (i < 7 && (k === "rain" || snowy) ? 4 : 0), 0, 100));
     const cloudLow = cloud.map(v => clamp(v * (k === "rain" ? 0.82 : 0.34), 0, 100));
     const cloudMid = cloud.map((v, i) => clamp(v * 0.55 + Math.sin(i * 0.7) * 7, 0, 100));
     const cloudHigh = cloud.map((v, i) => clamp(v * 0.32 + Math.cos(i * 0.55) * 9, 0, 100));
@@ -3294,32 +3475,32 @@ void main(){
     const uv = times.map((t, i) => {
       const h = (base.getHours() + i) % 24;
       if (isNight) return 0;
-      return Math.max(0, daylight(h) * (k === "day" ? 8.2 : 2.2) - (k === "rain" ? 0.5 : 0));
+      return Math.max(0, daylight(h) * (k === "day" ? 8.2 : k === "snow" ? 0.55 : 2.2) - (k === "rain" ? 0.5 : 0));
     });
     const light = times.map((t, i) => {
       const h = (base.getHours() + i) % 24;
       if (isNight) return 0;
-      return Math.max(0, daylight(h) * (k === "day" ? 880 : 310) * (1 - cloud[i] / 190));
+      return Math.max(0, daylight(h) * (k === "day" ? 880 : k === "snow" ? 170 : 310) * (1 - cloud[i] / 190));
     });
     const idx = 0;
-    const code = k === "rain" ? 63 : k === "day" ? 2 : 0;
+    const code = k === "rain" ? 63 : k === "snow" ? 73 : k === "day" ? 2 : 0;
     const info = weatherInfo(code);
-    const rainRate = k === "rain" ? rain[idx] : 0;
+    const rainRate = k === "rain" || snowy ? rain[idx] : 0;
     const env = {
-      temp: k === "rain" ? 18.4 : k === "night" ? 16.1 : 22.6,
-      apparent: k === "rain" ? 17.6 : k === "night" ? 15.2 : 22.1,
-      humidity: k === "rain" ? 89 : k === "night" ? 61 : 54,
+      temp: k === "rain" ? 18.4 : k === "snow" ? -3.4 : k === "night" ? 16.1 : 22.6,
+      apparent: k === "rain" ? 17.6 : k === "snow" ? -7.1 : k === "night" ? 15.2 : 22.1,
+      humidity: k === "rain" ? 89 : k === "snow" ? 84 : k === "night" ? 61 : 54,
       precipitation: rainRate / 4,
       rainRate,
       rainNext: rain[1],
       rainTotal24: rain.slice(1, 25).reduce((s, v) => s + v, 0),
-      dailyRain: rr(k === "rain" ? 28.6 : 0),
+      dailyRain: rr(k === "rain" ? 28.6 : k === "snow" ? 9.8 : 0),
       cloud: cloud[idx],
       cloudLow: cloudLow[idx],
       cloudMid: cloudMid[idx],
       cloudHigh: cloudHigh[idx],
       uv: uv[idx],
-      uvMax: k === "rain" ? 2.2 : k === "night" ? 0 : 7.6,
+      uvMax: k === "rain" ? 2.2 : k === "snow" ? 0.6 : k === "night" ? 0 : 7.6,
       shortwave: light[idx],
       isDay: k === "night" ? false : k === "day" ? true : daylight(base.getHours()) > 0.02,
       code,
@@ -3327,12 +3508,12 @@ void main(){
       conditionEn: info.en,
       group: info.group,
       storm: false,
-      snow: false,
-      windSpeed: k === "rain" ? 3.4 : 1.8,
+      snow: snowy,
+      windSpeed: k === "rain" ? 3.4 : k === "snow" ? 4.1 : 1.8,
       windDir: 135,
-      windGust: k === "rain" ? 5.2 : 3.1,
+      windGust: k === "rain" ? 5.2 : k === "snow" ? 6.4 : 3.1,
       pressure: 1008,
-      visibility: k === "rain" ? 4200 : 18000,
+      visibility: k === "rain" ? 4200 : k === "snow" ? 2600 : 18000,
       sunrise: times[0].slice(0, 11) + "06:11",
       sunset: times[0].slice(0, 11) + "17:42"
     };
@@ -3392,6 +3573,7 @@ void main(){
     if (scene) {
       scene.setPlace(state.place);
       scene.setEnvironment(state.env);
+      if (state.demoMode && scene.snapEnvironment) scene.snapEnvironment();
     }
     renderWeatherUI();
     setLiveStatus();
